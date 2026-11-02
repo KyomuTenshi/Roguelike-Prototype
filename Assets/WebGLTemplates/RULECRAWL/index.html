@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <link rel="stylesheet" href="TemplateData/style.css">
+  </head>
+  <body>
+    <div id="unity-container">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+      <div id="unity-loading">
+        <div id="unity-title">{{{ PRODUCT_NAME }}}</div>
+        <div id="unity-progress"><div id="unity-progress-fill"></div></div>
+        <div id="unity-percent">0%</div>
+      </div>
+
+      <button id="unity-fullscreen" title="Fullscreen" aria-label="Fullscreen">
+        <svg viewBox="0 0 16 16" width="20" height="20" shape-rendering="crispEdges">
+          <path d="M1 1h5v2H3v3H1zM10 1h5v5h-2V3h-3zM1 10h2v3h3v2H1zM13 10h2v5h-5v-2h3z" fill="currentColor"/>
+        </svg>
+      </button>
+
+      <div id="unity-warning"></div>
+    </div>
+
+    <script>
+      var container = document.querySelector("#unity-container");
+      var canvas = document.querySelector("#unity-canvas");
+      var loading = document.querySelector("#unity-loading");
+      var fill = document.querySelector("#unity-progress-fill");
+      var percent = document.querySelector("#unity-percent");
+      var fullscreenButton = document.querySelector("#unity-fullscreen");
+      var warning = document.querySelector("#unity-warning");
+
+      // Errors and warnings from the engine, shown over the game for a few seconds.
+      function unityShowBanner(msg, type) {
+        var div = document.createElement("div");
+        div.innerHTML = msg;
+        div.className = type == "error" ? "banner error" : "banner";
+        warning.appendChild(div);
+        if (type != "error") setTimeout(function () { warning.removeChild(div); }, 5000);
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+        workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if MEMORY_FILENAME
+        memoryUrl: buildUrl + "/{{{ MEMORY_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: unityShowBanner,
+        // sharp pixels on high-density screens, capped so big monitors stay fast
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      };
+
+      // The canvas always fills the page (and the itch.io frame); the game adapts to any size.
+      function focusGame() { canvas.focus(); }
+      canvas.addEventListener("pointerdown", focusGame);
+
+      function updateFullscreenButton() {
+        var full = document.fullscreenElement || document.webkitFullscreenElement;
+        fullscreenButton.style.display = full ? "none" : "";
+      }
+      document.addEventListener("fullscreenchange", updateFullscreenButton);
+      document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          var p = Math.round(progress * 100);
+          fill.style.width = p + "%";
+          percent.textContent = p + "%";
+        }).then(function (unityInstance) {
+          loading.classList.add("hidden");
+          setTimeout(function () { loading.style.display = "none"; }, 600);
+          fullscreenButton.onclick = function () {
+            unityInstance.SetFullscreen(1);
+            focusGame();
+          };
+          focusGame();
+        }).catch(function (message) {
+          alert(message);
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>

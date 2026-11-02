@@ -1,0 +1,103 @@
+@font-face {
+  font-family: "PressStart";
+  src: url("PressStart2P-Regular.ttf") format("truetype");
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #131117;
+}
+
+#unity-container {
+  position: fixed;
+  inset: 0;
+}
+
+#unity-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #131117;
+  outline: none;
+  image-rendering: pixelated;
+}
+
+#unity-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  background: #131117;
+  font-family: "PressStart", monospace;
+  color: #f0d180;
+  transition: opacity 0.6s;
+}
+
+#unity-loading.hidden { opacity: 0; }
+
+#unity-title {
+  font-size: clamp(20px, 5vw, 44px);
+  letter-spacing: 0.08em;
+  text-shadow: 4px 4px 0 #000;
+}
+
+#unity-progress {
+  width: min(420px, 70vw);
+  height: 14px;
+  border: 3px solid #f0d180;
+  padding: 3px;
+  box-sizing: content-box;
+}
+
+#unity-progress-fill {
+  width: 0;
+  height: 100%;
+  background: #f0d180;
+}
+
+#unity-percent {
+  font-size: 12px;
+  color: #b8a48e;
+}
+
+#unity-fullscreen {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #f0d180;
+  background: rgba(19, 17, 23, 0.75);
+  color: #f0d180;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+#unity-fullscreen:hover { opacity: 1; }
+
+#unity-warning {
+  position: absolute;
+  left: 50%;
+  top: 5%;
+  transform: translate(-50%);
+}
+
+.banner {
+  background: #ffe066;
+  padding: 10px;
+  font-family: sans-serif;
+}
+
+.banner.error { background: #ff4d4d; }
