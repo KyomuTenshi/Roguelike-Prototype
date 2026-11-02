@@ -12,15 +12,16 @@
 <img src="https://img.shields.io/badge/Unity-6000.3-000000?style=flat-square&logo=unity&logoColor=white" alt="Unity 6">
 <img src="https://img.shields.io/badge/C%23-.NET-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt="C#">
 <img src="https://img.shields.io/badge/Render-URP_2D-000000?style=flat-square&logo=unity&logoColor=white" alt="URP 2D">
-<img src="https://img.shields.io/badge/Input_System-new-1F6FEB?style=flat-square" alt="Input System">
-<img src="https://img.shields.io/badge/Platform-Windows_·_macOS_·_Web-555555?style=flat-square" alt="Windows, macOS, Web">
-<img src="https://img.shields.io/badge/status-release-2EA043?style=flat-square" alt="Release">
+<img src="https://img.shields.io/badge/Input_System-1.18-1F6FEB?style=flat-square" alt="Input System">
+<img src="https://img.shields.io/badge/Platform-Windows_·_macOS_·_Web-555555?style=flat-square" alt="Platform">
+<img src="https://img.shields.io/badge/Status-release-2EA043?style=flat-square" alt="Status">
 <a href="https://kyomutenshi.itch.io/rulecrawl"><img src="https://img.shields.io/badge/Play-itch.io-FA5C5C?style=flat-square&logo=itchdotio&logoColor=white" alt="Play on itch.io"></a>
 </p>
 
 <p>
 <a href="#об-игре">Об игре</a> ·
 <a href="#быстрый-старт">Быстрый старт</a> ·
+<a href="#возможности">Возможности</a> ·
 <a href="#управление">Управление</a> ·
 <a href="#сборка">Сборка</a> ·
 <a href="#архитектура">Архитектура</a> ·
@@ -61,10 +62,10 @@
    git clone https://github.com/KyomuTenshi/Roguelike-Prototype.git
    ```
 2. Положите каждый пак ассетов в `Assets/_ThirdParty/` под именем папки из таблицы.
-
-   > Сцена ссылается на ассеты по их GUID из `.meta`-файлов, а `.meta` сторонних паков в репозиторий не входят. У заново скачанных паков GUID будут другими, поэтому часть ссылок в сцене (`GameAssets` на объекте `Game`) придётся назначить вручную. Код от этого не зависит и открывается сразу.
-3. В Unity Hub нажмите **Add** и выберите папку репозитория.
+3. В Unity Hub нажмите **Add** → **Add project from disk** и выберите папку репозитория.
 4. Откройте `Assets/_Project/Scenes/Game.unity` и нажмите **Play**.
+
+> Сцена ссылается на ассеты по GUID из `.meta`-файлов, а `.meta` сторонних паков в репозиторий не входят. У заново скачанных паков GUID будут другими, поэтому часть ссылок в компоненте `GameAssets` на объекте `Game` придётся назначить вручную. Код от этого не зависит и открывается сразу.
 
 ## Возможности
 
@@ -138,6 +139,14 @@ flowchart TB
 | `Loc` / `Strings` | Таблица строк на четыре языка, смена языка без перезапуска |
 | `SaveSystem` | Прогресс, рекорды, открытия кодекса, воспоминания и концовки |
 
+**Ключевые решения**
+
+- Комнаты описаны ASCII-раскладками, а боевые раскладки собираются заново в каждом забеге.
+- Случайность забега идёт через собственный генератор `RunRandom` с сидом, поэтому Ежедневный забег одинаков для всех игроков.
+- Закон комнаты — набор флагов в `Rules`: игрок, враги, камера и `StyleController` читают их сами.
+- Все строки собраны в одной таблице на четыре языка, язык меняется без перезапуска.
+- Звуковые эффекты синтезируются в коде, а не загружаются из файлов.
+
 <details>
 <summary><b>Структура проекта</b></summary>
 <br>
@@ -170,11 +179,14 @@ Assets/
 | | |
 |---|---|
 | **Движок** | Unity 6000.3.8f1 |
-| **Рендер** | Universal Render Pipeline, 2D Renderer, Pixel Perfect Camera 384 × 216 |
-| **Ввод** | Input System (клавиатура, мышь, геймпад) |
-| **Интерфейс** | uGUI, собирается из кода |
+| **Язык** | C# (namespace `RulesShift`) |
+| **Рендер** | Universal Render Pipeline 17.3.0, 2D Renderer, Pixel Perfect Camera 384 × 216 |
+| **Ввод** | Input System 1.18.0 (клавиатура, мышь, геймпад) |
+| **Интерфейс** | uGUI 2.0.0, собирается из кода |
 | **Шрифты** | Press Start 2P, Handjet, ZCOOL QingKe HuangYou (SIL OFL) |
 | **Звуки** | Синтезируются в игре |
+
+Остальные пакеты — в [`Packages/manifest.json`](Packages/manifest.json).
 
 ## Сторонние ассеты
 
