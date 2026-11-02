@@ -42,14 +42,21 @@ namespace RulesShift
 #endif
         }
 
-        /// <summary>F11 (and Alt/Option + Enter) on desktop. In a browser F11 belongs to the browser.</summary>
+        /// <summary>
+        /// F11 on desktop, plus Option + Enter on macOS. Windows handles Alt + Enter by itself
+        /// ("Allow Fullscreen Switch"), and in a browser F11 belongs to the browser.
+        /// </summary>
         public static void HotkeyTick()
         {
 #if !UNITY_WEBGL || UNITY_EDITOR
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null) return;
+            bool toggle = kb.f11Key.wasPressedThisFrame;
+#if !UNITY_STANDALONE_WIN
             bool alt = kb.leftAltKey.isPressed || kb.rightAltKey.isPressed;
-            if (kb.f11Key.wasPressedThisFrame || (alt && kb.enterKey.wasPressedThisFrame)) Toggle();
+            toggle |= alt && kb.enterKey.wasPressedThisFrame;
+#endif
+            if (toggle) Toggle();
 #endif
         }
     }
