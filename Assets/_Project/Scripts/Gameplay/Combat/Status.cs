@@ -9,13 +9,15 @@ namespace RulesShift
         public System.Func<Vector2> position;
         public bool resistFreeze;                 // the boss is only slowed
 
-        float burn, poisonTime, slow, freeze, tick = 0.5f, sparkTimer, poisonFxTimer;
+        float burn, poisonTime, slow, freeze, mark, tick = 0.5f, sparkTimer, poisonFxTimer;
         int poison;
         GameObject fireFx;
 
         public bool Burning => burn > 0f;
         public bool Poisoned => poison > 0 && poisonTime > 0f;
         public bool Frozen => freeze > 0f && !resistFreeze;
+        public bool Chilled => slow > 0f || freeze > 0f;
+        public bool Marked => mark > 0f;
 
         public float SpeedMul => Frozen ? 0f : (slow > 0f || freeze > 0f) ? 0.55f : 1f;
 
@@ -47,8 +49,10 @@ namespace RulesShift
         }
         public void Slow(float time) => slow = Mathf.Max(slow, time);
         public void Freeze(float time) => freeze = Mathf.Max(freeze, time);
+        /// <summary>Mark relic: the target takes more damage for a while.</summary>
+        public void Mark(float time) => mark = Mathf.Max(mark, time);
 
-        public void Clear() { burn = poisonTime = slow = freeze = 0f; poison = 0; }
+        public void Clear() { burn = poisonTime = slow = freeze = mark = 0f; poison = 0; }
 
         void Update()
         {
@@ -57,6 +61,7 @@ namespace RulesShift
             burn -= dt;
             slow -= dt;
             freeze -= dt;
+            mark -= dt;
             poisonTime -= dt;
             poisonFxTimer -= dt;
             if (poisonTime <= 0f) poison = 0;
@@ -67,6 +72,11 @@ namespace RulesShift
 
             Vector2 p = position != null ? position() : (Vector2)transform.position;
             sparkTimer -= dt;
+            if (sparkTimer <= 0f && Marked && !Burning && !Poisoned)
+            {
+                sparkTimer = 0.25f;
+                Fx.Burst(p + Vector2.up * 0.7f, new Color(1f, 0.75f, 0.3f), 1, 0.6f, 0.3f, 1f);
+            }
             if (sparkTimer <= 0f && ((Burning && !fireFx) || Poisoned))
             {
                 sparkTimer = 0.18f;

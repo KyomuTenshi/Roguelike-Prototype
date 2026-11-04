@@ -17,7 +17,11 @@ namespace RulesShift
         Upside,     // Перевёрнутая
         Neon,       // Неон
         Console,    // Пульт
-        Boss        // Законодатель
+        Boss,       // Законодатель
+        Gravity,    // Гравитация: всё тянет к центру зала
+        Time,       // Стоп-кадр: мир движется, только когда движешься ты
+        Inflation,  // Инфляция: выстрел стоит монету, но бьёт вдвое сильнее
+        Bounce      // Рикошет: все снаряды отскакивают от стен, и вражеские тоже
     }
 
     public struct LawInfo
@@ -49,6 +53,11 @@ namespace RulesShift
         public static bool EnemyLights;     // enemies and orbs glow (Neon)
         public static float CameraAngle;    // 180 = upside down
         public static float EnemySpeedMul;  // global enemy speed factor
+        public static float Gravity;        // >0: everything is pulled to the middle of the room (units/s)
+        public static bool TimeFlow;        // the world moves only while the hero moves
+        public static float WorldTime = 1f; // the Time law: speed of enemies and their shots (0.15 - 1)
+        public static bool Inflation;       // a shot costs a coin and hits twice as hard
+        public static bool Bounce;          // every shot bounces off the walls
 
         static Rules() { Reset(); }
 
@@ -67,6 +76,20 @@ namespace RulesShift
             EnemyLights = false;
             CameraAngle = 0f;
             EnemySpeedMul = 1f;
+            Gravity = 0f;
+            TimeFlow = false;
+            WorldTime = 1f;
+            Inflation = false;
+            Bounce = false;
+        }
+
+        /// <summary>The Gravity law's pull toward the middle of the room (zero elsewhere).</summary>
+        public static Vector2 Pull(Vector2 at)
+        {
+            if (Gravity <= 0f || !RoomManager.I || !RoomManager.I.CurrentRoom) return Vector2.zero;
+            Vector2 d = RoomManager.I.CurrentRoom.Center - at;
+            float m = d.magnitude;
+            return m < 0.6f ? Vector2.zero : d / m * Gravity * Mathf.Clamp01(m / 3f);
         }
 
         public static void Apply(Law law)
@@ -84,7 +107,7 @@ namespace RulesShift
         }
 
         /// <summary>Laws that can be stacked as a second law without breaking the room's goal.</summary>
-        public static readonly Law[] Stackable = { Law.Crypt, Law.Noir, Law.Ice, Law.Mirror, Law.Upside, Law.Neon };
+        public static readonly Law[] Stackable = { Law.Crypt, Law.Noir, Law.Ice, Law.Mirror, Law.Upside, Law.Neon, Law.Gravity, Law.Bounce };
 
         /// <summary>"Нуар" or "Нуар + Лёд".</summary>
         public static string Label =>
@@ -102,7 +125,11 @@ namespace RulesShift
                 case Law.Retro: OneHit = true; EnemySpeedMul = 0.9f; break;
                 case Law.Stealth: Stealth = true; break;
                 case Law.Upside: CameraAngle = 180f; break;
-                case Law.Neon: BeatMove = true; EnemyLights = true; break;
+                case Law.Neon: BeatMove = true; EnemyLights = true; EnemySpeedMul = 0.8f; break;
+                case Law.Gravity: Gravity = 2.4f; break;
+                case Law.Time: TimeFlow = true; break;
+                case Law.Inflation: Inflation = true; break;
+                case Law.Bounce: Bounce = true; break;
             }
         }
 
@@ -122,6 +149,10 @@ namespace RulesShift
                 case Law.Neon: return "neon";
                 case Law.Console: return "console";
                 case Law.Boss: return "boss";
+                case Law.Gravity: return "gravity";
+                case Law.Time: return "time";
+                case Law.Inflation: return "inflation";
+                case Law.Bounce: return "bounce";
                 default: return "none";
             }
         }
@@ -142,6 +173,10 @@ namespace RulesShift
                 case Law.Neon: return L(law, new Color(1f, 0.3f, 0.9f), "neon");
                 case Law.Console: return L(law, new Color(0.5f, 0.9f, 1f), "console");
                 case Law.Boss: return L(law, new Color(1f, 0.25f, 0.25f), "boss");
+                case Law.Gravity: return L(law, new Color(0.7f, 0.55f, 1f), "gravity");
+                case Law.Time: return L(law, new Color(0.6f, 1f, 0.85f), "time");
+                case Law.Inflation: return L(law, new Color(1f, 0.82f, 0.3f), "inflation");
+                case Law.Bounce: return L(law, new Color(0.5f, 1f, 0.6f), "bounce");
                 default: return L(law, new Color(0.95f, 0.85f, 0.7f), "entry");
             }
         }
@@ -149,7 +184,7 @@ namespace RulesShift
         static LawInfo L(Law law, Color c, string m)
         {
             string k = Key(law);
-            return new LawInfo { name = Loc.T("law." + k + ".name"), rule = Loc.T("law." + k + ".rule"), color = c, music = m };
+            return new LawInfo { name = Loc.T("law." + k + ".name"), rule = Loc.TDevice("law." + k + ".rule"), color = c, music = m };
         }
     }
 }

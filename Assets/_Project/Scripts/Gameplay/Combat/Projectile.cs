@@ -14,6 +14,7 @@ namespace RulesShift
         public float blast;                // explosion radius on impact (0 = none)
         public bool napalm;                // explosions set enemies on fire
         public float crit;                 // chance of triple damage
+        public bool spectral;              // flies through walls (Ghost relic)
     }
 
     /// <summary>Arrow, orb or soul. Moves itself and checks overlaps every frame (no physics bodies needed).</summary>
@@ -26,7 +27,8 @@ namespace RulesShift
         static bool filterReady;
 
         Team team;
-        Vector2 velocity;
+        Vector2 velocity, origin;
+        int wallBounces;   // the Bounce law: any shot bounces off walls
         float damage;
         int pierce;
         float radius;
@@ -42,8 +44,20 @@ namespace RulesShift
         public static Projectile Hero(Vector2 pos, Vector2 dir, HeroDef hero, float speed, float damage, int pierce, ShotMods mods = default, float size = 1f)
         {
             var p = Create("Shot", pos, dir, speed, damage, Team.Player, (hero.projectile == null ? 0.22f : 0.18f) * size, 1.8f);
-            var s = hero.projectile != null && GameAssets.I ? GameAssets.I.D(hero.projectile) : null;
-            var vis = p.Visual(s ? s : Gfx.Orb, s ? Color.white : hero.projColor, s != null);
+            var a = GameAssets.I;
+            Sprite s = null;
+            bool up = false;
+            if (hero.projectile != null && a)
+            {
+                // the Retro law: the Elf shoots the 8-bit arrow (drawn pointing right)
+                if (a.RetroOn && hero.projectile == "weapon_arrow")
+                {
+                    var f = a.Anim("sgq_arrow_anim");
+                    if (f.Length > 0) s = f[0];
+                }
+                if (!s) { s = a.D(hero.projectile); up = s != null; }
+            }
+            var vis = p.Visual(s ? s : Gfx.Orb, s ? Color.white : hero.projColor, up);
             vis.transform.localScale = Vector3.one * (s ? 1f : 1.2f) * size;
             Gfx.Unlit(vis);
             p.pierce = pierce;
@@ -88,7 +102,17 @@ namespace RulesShift
         public static Projectile Orb(Vector2 pos, Vector2 dir, float speed, float damage, Color color, float size = 1f)
         {
             var p = Create("Orb", pos, dir, speed, damage, Team.Enemy, 0.2f * size, 4f);
-            var sr = p.Visual(Gfx.Orb, color, false);
+            var retro = GameAssets.I && GameAssets.I.RetroOn ? GameAssets.I.Anim("sgq_orb_anim") : null;
+            SpriteRenderer sr;
+            if (retro != null && retro.Length > 0)
+            {
+                // the Retro law: a Game Boy fireball instead of a glowing orb
+                sr = p.Visual(retro[0], Color.white, false);
+                var anim = sr.gameObject.AddComponent<SpriteAnimator>();
+                anim.target = sr;
+                anim.Play(retro, 12f);
+            }
+            else sr = p.Visual(Gfx.Orb, color, false);
             sr.transform.localScale = Vector3.one * size;
             if (Fx.Unlit) sr.sharedMaterial = Fx.Unlit;   // visible in the dark
             p.sparkColor = color;
@@ -107,6 +131,8 @@ namespace RulesShift
             var p = go.AddComponent<Projectile>();
             p.team = team;
             p.velocity = dir.normalized * speed;
+            p.origin = pos;
+            if (Rules.Bounce) { p.wallBounces = 2; p.life += 1f; }
             p.damage = damage;
             p.radius = radius;
             p.life = life;
@@ -161,8 +187,10 @@ namespace RulesShift
         void Update()
         {
             float dt = Time.deltaTime;
+            if (team == Team.Enemy) dt *= Rules.WorldTime;   // the Time law: enemy shots hang in the air
             if (dt <= 0f) return;
             life -= dt;
+            if (Rules.Gravity > 0f) velocity += Rules.Pull(transform.position) * 1.2f * dt;   // shots bend toward the middle
             if (life <= 0f)
             {
                 if (soul && mods.blast > 0f) Explode(transform.position);
@@ -214,29 +242,33 @@ namespace RulesShift
         {
             results.Clear();
             Physics2D.OverlapCircle(p, radius, filter, results);
+            // targets first: a crate or a lever stands on a solid cell, the shot must hit it before the cell stops it
             foreach (var col in results)
             {
                 if (!col) continue;
                 var hb = col.GetComponent<Hurtbox>();
-                if (hb != null)
-                {
-                    var target = hb.owner;
-                    if (target == null || !target.Alive || target.Team == team || alreadyHit.Contains(target)) continue;
-                    alreadyHit.Add(target);
-                    HitTarget(target);
-                    if (pierce-- <= 0) { Impact(p); return true; }
-                    continue;
-                }
-                if (col.isTrigger) continue;
+                if (hb == null) continue;
+                var target = hb.owner;
+                if (target == null || !target.Alive || target.Team == team || alreadyHit.Contains(target)) continue;
+                alreadyHit.Add(target);
+                HitTarget(target);
+                if (pierce-- <= 0) { Impact(p); return true; }
+            }
+            if (mods.spectral && team == Team.Player) return false;
+            foreach (var col in results)
+            {
+                if (!col || col.isTrigger) continue;
                 var rb = col.attachedRigidbody;
                 if (rb == null || rb.bodyType == RigidbodyType2D.Static)
                 {
-                    if (mods.bounces > 0 && team == Team.Player)
+                    if ((mods.bounces > 0 && team == Team.Player) || wallBounces > 0)
                     {
-                        mods.bounces--;
+                        if (mods.bounces > 0 && team == Team.Player) mods.bounces--;
+                        else wallBounces--;
                         velocity = Vector2.Reflect(velocity, WallNormal(prev, p));
                         transform.position = prev;
-                        alreadyHit.Clear();
+                        if (team == Team.Player) alreadyHit.Clear();
+                        turnVisual = true;
                         Fx.Burst(prev, sparkColor, 3, 2f, 0.2f, 1f);
                         return true;
                     }
@@ -249,9 +281,16 @@ namespace RulesShift
 
         void HitTarget(IDamageable target)
         {
-            if (crit) Fx.Text(target.Position + Vector2.up * 0.8f, Loc.T("hud.crit"), new Color(1f, 0.85f, 0.3f), 0.7f, 0.6f);
-            target.Hit(damage, velocity.normalized);
+            if (crit)
+            {
+                Fx.Text(target.Position + Vector2.up * 0.8f, Loc.T("hud.crit"), new Color(1f, 0.85f, 0.3f), 0.7f, 0.6f);
+                if (!(target is Breakable)) { Juice.HitStop(0.035f); Juice.Flash(new Color(1f, 0.95f, 0.8f), 0.12f); }
+            }
+            var hero = team == Team.Player && !Rules.ShotsHeal ? PlayerController.I : null;
+            float dmg = hero ? hero.PreHit(target, damage, origin) : damage;
+            target.Hit(dmg, velocity.normalized);
             if (team != Team.Player || Rules.ShotsHeal) return;
+            if (hero) hero.PostHit(target, dmg, velocity.normalized);
 
             ApplyStatus(target, mods);
             if (mods.split > 0 && !shard)
@@ -310,6 +349,33 @@ namespace RulesShift
         /// Knight's swing: enemy shots inside the arc turn around and become the hero's,
         /// carrying the relic effects. Returns how many were reflected.
         /// </summary>
+        /// <summary>Phase relic: enemy shots around the hero vanish.</summary>
+        public static void ClearEnemyNear(Vector2 center, float range)
+        {
+            foreach (var p in all.ToArray())
+            {
+                if (!p || p.team != Team.Enemy || Vector2.Distance(p.transform.position, center) > range) continue;
+                Fx.Burst(p.transform.position, new Color(0.8f, 0.6f, 1f), 4, 2f, 0.25f, 1f);
+                Destroy(p.gameObject);
+            }
+        }
+
+        /// <summary>A hero shot that is not aimed by the player (nova, shell spikes, shatter shards).</summary>
+        public static Projectile Spike(Vector2 pos, Vector2 dir, float speed, float damage, Color color, ShotMods mods, float size = 0.8f)
+        {
+            var p = Create("Spike", pos, dir, speed, damage, Team.Player, 0.17f * size, 0.9f);
+            var sr = p.Visual(Gfx.Orb, color, false);
+            sr.transform.localScale = Vector3.one * size;
+            Gfx.Unlit(sr);
+            p.sparkColor = color;
+            p.shard = true;
+            mods.split = 0;
+            mods.homing = 0f;
+            mods.bounces = 0;
+            p.mods = mods;
+            return p;
+        }
+
         public static int Reflect(Vector2 center, Vector2 aim, float range, float halfArc, float damage, ShotMods mods)
         {
             int n = 0;
@@ -384,6 +450,8 @@ namespace RulesShift
                 e.Hit(dmg, e.Position - p);
                 if (napalm) { var st = e.GetComponent<Status>(); if (st) st.Burn(3f); }
             }
+            foreach (var br in Breakable.All.ToArray())
+                if (br && br.Alive && Vector2.Distance(br.Position, p) < r) br.Hit(dmg, br.Position - p);
             var b = Bosses.Current;
             if (b != null && Vector2.Distance(b.Position, p) < r + 0.6f)
             {

@@ -73,6 +73,8 @@ namespace RulesShift
 
         public void Apply(Law law, bool instant = false)
         {
+            // Version 1.0 keeps its Game Boy look under most laws (darkness and the beat still show)
+            if (GameAssets.RetroTheme && law != Law.Crypt && law != Law.Neon && law != Law.Mirror) law = Law.Retro;
             current = law;
             look = LookOf(law);
             var profile = GetProfile(law);
@@ -173,6 +175,10 @@ namespace RulesShift
                     break;
                 case Law.Console: l.light = 0.6f; l.lightColor = new Color(0.7f, 0.85f, 1f); l.background = new Color(0.02f, 0.04f, 0.07f); break;
                 case Law.Boss: l.light = 0.8f; l.lightColor = new Color(1f, 0.78f, 0.78f); l.background = new Color(0.08f, 0.01f, 0.02f); break;
+                case Law.Gravity: l.light = 0.85f; l.lightColor = new Color(0.85f, 0.75f, 1f); l.background = new Color(0.05f, 0.02f, 0.09f); l.shake = 0.01f; break;
+                case Law.Time: l.light = 0.95f; l.lightColor = new Color(0.85f, 1f, 0.95f); l.background = new Color(0.03f, 0.07f, 0.06f); break;
+                case Law.Inflation: l.light = 1.05f; l.lightColor = new Color(1f, 0.92f, 0.7f); l.background = new Color(0.09f, 0.07f, 0.02f); break;
+                case Law.Bounce: l.light = 1f; l.lightColor = new Color(0.85f, 1f, 0.85f); l.background = new Color(0.03f, 0.08f, 0.04f); break;
             }
             return l;
         }
@@ -239,6 +245,12 @@ namespace RulesShift
                 case Law.Retro:
                     ca.saturation.value = -100f; ca.contrast.value = 100f; ca.postExposure.value = 0.6f;
                     ca.colorFilter.value = new Color(0.72f, 1f, 0.66f);
+                    if (GameAssets.I && GameAssets.I.HasRetro)
+                    {
+                        // the SGQ sprites already use the Game Boy palette: keep its four greens, only pull the hero into it
+                        ca.contrast.value = 25f; ca.postExposure.value = 0.25f;
+                        ca.colorFilter.value = new Color(0.8f, 1f, 0.72f);
+                    }
                     // bloom stays on but invisible: switching it off and on breaks URP's render graph in the editor
                     vg.intensity.value = 0.2f; bl.intensity.value = 0.01f; bl.threshold.value = 4f;
                     break;
@@ -267,6 +279,23 @@ namespace RulesShift
                 case Law.Boss:
                     ca.contrast.value = 15f; ca.saturation.value = 10f; cr.intensity.value = 0.15f; bl.intensity.value = 0.8f;
                     vg.intensity.value = 0.4f; vg.color.value = new Color(0.25f, 0f, 0f);
+                    break;
+                case Law.Gravity:
+                    ca.colorFilter.value = new Color(0.9f, 0.82f, 1.1f); cr.intensity.value = 0.3f;
+                    vg.intensity.value = 0.55f; vg.smoothness.value = 0.55f; vg.color.value = new Color(0.12f, 0f, 0.2f);
+                    break;
+                case Law.Time:
+                    ca.saturation.value = -45f; ca.colorFilter.value = new Color(0.85f, 1f, 0.95f); ca.contrast.value = 10f;
+                    fg.type.value = FilmGrainLookup.Thin2; fg.intensity.value = 0.25f; vg.intensity.value = 0.35f;
+                    break;
+                case Law.Inflation:
+                    ca.colorFilter.value = new Color(1.1f, 1f, 0.75f); ca.saturation.value = 15f;
+                    bl.threshold.value = 0.7f; bl.intensity.value = 1.2f; bl.tint.value = new Color(1f, 0.85f, 0.4f);
+                    vg.intensity.value = 0.3f; vg.color.value = new Color(0.2f, 0.12f, 0f);
+                    break;
+                case Law.Bounce:
+                    ca.colorFilter.value = new Color(0.85f, 1.08f, 0.88f); ca.contrast.value = 12f;
+                    bl.intensity.value = 0.9f; bl.tint.value = new Color(0.6f, 1f, 0.7f); vg.intensity.value = 0.3f;
                     break;
             }
             return p;
