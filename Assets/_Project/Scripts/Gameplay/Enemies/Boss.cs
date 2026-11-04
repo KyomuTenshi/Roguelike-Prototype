@@ -257,6 +257,7 @@ namespace RulesShift
                 return true;
             }
             hp -= Rules.OneHit ? 10 : dmg;
+            Juice.Number(Position, dmg);
             flash = 0.1f;
             Sfx.Play("hit", 0.8f, 0.7f);
             Fx.Burst(Position, new Color(1f, 0.5f, 0.4f), 4, 3f, 0.3f, 1.2f);
@@ -274,6 +275,8 @@ namespace RulesShift
         {
             dead = true;
             Defeated = true;
+            Juice.Slow(0.25f, 1.2f);
+            Juice.Flash(Color.white, 0.4f);
             rb.linearVelocity = Vector2.zero;
             if (final)
             {

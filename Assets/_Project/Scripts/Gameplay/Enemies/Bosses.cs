@@ -17,6 +17,9 @@ namespace RulesShift
         /// <summary>The room's boss died (reset when a room is built).</summary>
         public static bool Defeated;
 
+        /// <summary>A boss is alive in the room.</summary>
+        public static bool Fighting => Current != null;
+
         public static IBoss Current
         {
             get
