@@ -2,7 +2,11 @@ using UnityEngine;
 
 namespace RulesShift
 {
-    /// <summary>Smooth follow, clamped to the room, with screen shake and the Upside-down rotation.</summary>
+    /// <summary>
+    /// Smooth follow, clamped to the room, with screen shake and the Upside-down rotation.
+    /// Without a Pixel Perfect Camera it zooms in just enough for the room to fill the screen;
+    /// with one, the Pixel Perfect Camera owns the zoom (whole pixels) and the clamp follows its size.
+    /// </summary>
     [DefaultExecutionOrder(100)]
     public class CameraFollow : MonoBehaviour
     {
@@ -15,6 +19,7 @@ namespace RulesShift
         public static bool ShakeEnabled = true;   // Settings → Тряска экрана
 
         Camera cam;
+        float baseSize;
         Vector2 pos;
         float shake;
         float angle;
@@ -23,6 +28,19 @@ namespace RulesShift
         {
             I = this;
             cam = GetComponent<Camera>();
+            baseSize = cam ? cam.orthographicSize : 7f;
+            pixelPerfect = GetComponent<UnityEngine.Rendering.Universal.PixelPerfectCamera>();
+        }
+
+        UnityEngine.Rendering.Universal.PixelPerfectCamera pixelPerfect;
+
+        /// <summary>The largest view that still fits inside the room's bounds (never wider than the scene's camera).</summary>
+        void Fit()
+        {
+            if (!cam || bounds.width <= 0f || bounds.height <= 0f) return;
+            if (pixelPerfect && pixelPerfect.isActiveAndEnabled) return;
+            float aspect = Mathf.Max(0.1f, cam.aspect);
+            cam.orthographicSize = Mathf.Max(3f, Mathf.Min(baseSize, bounds.height / 2f, bounds.width / (2f * aspect)));
         }
 
         void OnDestroy()
@@ -41,6 +59,7 @@ namespace RulesShift
 
         Vector2 Desired()
         {
+            Fit();
             Vector2 d = target ? (Vector2)target.position + new Vector2(0f, 0.7f) : bounds.center;
             float h = cam ? cam.orthographicSize : 7f;
             float w = cam ? h * cam.aspect : 12f;

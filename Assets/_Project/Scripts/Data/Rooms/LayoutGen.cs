@@ -9,7 +9,7 @@ namespace RulesShift
     /// </summary>
     public static class LayoutGen
     {
-        static readonly int[] Widths = { 20, 22, 22, 24, 26 };
+        static readonly int[] Widths = { 26, 28, 30, 30, 32, 34 };
 
         public static string[] Generate(System.Random rnd)
         {
@@ -24,7 +24,8 @@ namespace RulesShift
         static string[] TryGenerate(System.Random rnd)
         {
             int W = Widths[rnd.Next(Widths.Length)];
-            int H = 12 + rnd.Next(4);
+            int H = 15 + rnd.Next(6);
+            int k = System.Math.Max(1, W * H / 280);   // bigger rooms get more cover
             var g = new char[W, H];   // g[x, row], row 0 = top (next to the doors)
             for (int x = 0; x < W; x++)
             for (int r = 0; r < H; r++) g[x, r] = '.';
@@ -33,13 +34,13 @@ namespace RulesShift
             switch (style)
             {
                 case 0: Pillars(g, W, H, rnd); break;
-                case 1: Clusters(g, W, H, rnd, 'X', 3 + rnd.Next(3)); break;
-                case 2: Clusters(g, W, H, rnd, 'h', 2 + rnd.Next(3)); Clusters(g, W, H, rnd, 'C', 1 + rnd.Next(2)); break;
-                case 3: CenterBlock(g, W, H, rnd); break;
+                case 1: Clusters(g, W, H, rnd, 'X', k * (3 + rnd.Next(3))); break;
+                case 2: Clusters(g, W, H, rnd, 'h', k * (2 + rnd.Next(3))); Clusters(g, W, H, rnd, 'C', k * (1 + rnd.Next(2))); break;
+                case 3: CenterBlock(g, W, H, rnd); Clusters(g, W, H, rnd, 'X', k - 1 + rnd.Next(2)); break;
                 default:
-                    Clusters(g, W, H, rnd, 'C', 1 + rnd.Next(2));
-                    Clusters(g, W, H, rnd, 'X', 1 + rnd.Next(3));
-                    Clusters(g, W, H, rnd, 'h', rnd.Next(2));
+                    Clusters(g, W, H, rnd, 'C', k * (1 + rnd.Next(2)));
+                    Clusters(g, W, H, rnd, 'X', k * (1 + rnd.Next(3)));
+                    Clusters(g, W, H, rnd, 'h', k * rnd.Next(2));
                     break;
             }
 
@@ -73,13 +74,13 @@ namespace RulesShift
                     if (System.Math.Abs(s.x - c.x) + System.Math.Abs(s.r - c.r) < 4) { near = true; break; }
                 if (near) continue;
                 spawns.Add(c);
-                if (spawns.Count >= 10) break;
+                if (spawns.Count >= 14) break;
             }
-            if (spawns.Count < 6) return null;
+            if (spawns.Count < 8) return null;
             foreach (var s in spawns) g[s.x, s.r] = 'E';
 
             // a bit of decor
-            int skulls = rnd.Next(3);
+            int skulls = rnd.Next(2 + k);
             for (int i = 0; i < cells.Count && skulls > 0; i++)
             {
                 var c = cells[cells.Count - 1 - i];
@@ -154,7 +155,7 @@ namespace RulesShift
         static void Clusters(char[,] g, int W, int H, System.Random rnd, char ch, int count)
         {
             int placed = 0;
-            for (int t = 0; t < 60 && placed < count; t++)
+            for (int t = 0; t < 60 + 20 * count && placed < count; t++)
             {
                 int w = 1 + rnd.Next(ch == 'C' ? 1 : 3), h = 1 + rnd.Next(2);
                 int x = 1 + rnd.Next(System.Math.Max(1, W / 2 - w - 1));

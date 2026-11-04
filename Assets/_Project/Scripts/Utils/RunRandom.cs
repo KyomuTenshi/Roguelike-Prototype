@@ -17,7 +17,20 @@ namespace RulesShift
             rng = new System.Random(seed);
         }
 
+        /// <summary>
+        /// A fresh stream for one room of the run: the same room at the same step gives the same doors, chests and elites
+        /// whatever happened before it (how many chests were opened, how long a fight took).
+        /// </summary>
+        public static void ForRoom(int step, string roomId)
+        {
+            int h = 17;
+            if (roomId != null) foreach (char c in roomId) h = unchecked(h * 31 + c);   // stable on every platform
+            rng = new System.Random(unchecked(Seed ^ (step * 92821) ^ (h * 486187739)));
+        }
+
         public static int Range(int min, int maxExclusive) => rng.Next(min, maxExclusive);
+
+        public static float Range(float min, float max) => min + (float)rng.NextDouble() * (max - min);
 
         public static float Value => (float)rng.NextDouble();
 
