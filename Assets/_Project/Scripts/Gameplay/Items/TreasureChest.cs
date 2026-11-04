@@ -17,6 +17,8 @@ namespace RulesShift
             Sprite[] f;
             if (golden && room.Theme == Theme.Classic && a && a.C("chest_golden_closed"))
                 f = new[] { a.C("chest_golden_closed"), a.C("chest_golden_open_full") };
+            else if (room.Theme == Theme.Retro && a && a.HasAnim("sgq_chest_anim"))
+                f = a.Anim("sgq_chest_anim");
             else f = a ? a.Anim("chest_full_open_anim") : new Sprite[0];
 
             var go = new GameObject("Chest");

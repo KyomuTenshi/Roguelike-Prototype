@@ -8,22 +8,31 @@ namespace RulesShift
     {
         public string id, key, sprite;
         public RelicDef relic;   // null = flask
+        public ActiveDef active; // an active item (Q) instead
         public System.Func<PlayerController, bool> available;
         public System.Action<PlayerController> apply;
 
         public bool IsRelic => relic != null;
+        public bool IsActive => active != null;
         /// <summary>Stat flask whose look is shuffled every run (unknown until drunk once).</summary>
-        public bool IsPotion => relic == null && Upgrades.IsPotionKey(key);
+        public bool IsPotion => relic == null && active == null && Upgrades.IsPotionKey(key);
         public bool Known => !IsPotion || Upgrades.IsKnown(key);
-        public string title => relic != null ? relic.Name : Known ? Loc.T("up." + key + ".name") : Loc.T("up.unknown.name");
-        public string desc => relic != null ? relic.Desc : Known ? Loc.T("up." + key + ".desc") : Loc.T("up.unknown.desc");
+        public string title => relic != null ? relic.Name : active != null ? active.Name : Known ? Loc.T("up." + key + ".name") : Loc.T("up.unknown.name");
+        public string desc => relic != null ? relic.Desc : active != null ? active.Desc : Known ? Loc.T("up." + key + ".desc") : Loc.T("up.unknown.desc");
         public string SpriteName => IsPotion ? Upgrades.SpriteFor(key) : sprite;
 
         public static Upgrade FromRelic(RelicDef r) => new Upgrade
         {
             id = "relic." + r.key, key = r.key, sprite = r.sprite, relic = r,
-            available = p => !p.Has(r.id),
+            available = p => !p.Has(r.id) && Relics.Fits(r, p),
             apply = p => p.AddRelic(r.id)
+        };
+
+        public static Upgrade FromActive(ActiveDef a) => new Upgrade
+        {
+            id = "active." + a.key, key = a.key, sprite = a.sprite, active = a,
+            available = p => p.ActiveItem != a.id,
+            apply = p => p.SetActive(a.id)
         };
     }
 
@@ -34,12 +43,12 @@ namespace RulesShift
         {
             F("heart", "flask_red", p => p.maxHalves < 12, p => { p.maxHalves += 2; p.Heal(2); }),
             F("heal", "flask_big_red", p => p.halves < p.maxHalves, p => p.Heal(99)),
-            F("speed", "flask_blue", p => p.moveSpeed < 8f, p => p.moveSpeed *= 1.15f),
-            F("damage", "flask_green", p => p.damage < 5, p => p.damage += 1),
-            F("rate", "flask_yellow", p => p.fireRate < 7f, p => p.fireRate *= 1.2f),
-            F("multi", "flask_big_green", p => p.shots < 3 && !p.Hero.Melee, p => p.shots += 1),
+            F("speed", "flask_blue", p => p.moveSpeed < 7.5f, p => p.moveSpeed *= 1.1f),
+            F("damage", "flask_green", p => p.damage < 4f, p => p.damage *= 1.2f),
+            F("rate", "flask_yellow", p => p.fireRate < 6f, p => p.fireRate *= 1.12f),
+            F("multi", "flask_big_green", p => p.shots < 3 && p.CanShootExtras, p => { p.shots += 1; p.damage *= 0.85f; }),
             F("pierce", "flask_big_blue", p => p.pierce < 2 && !p.Hero.Melee, p => p.pierce += 1),
-            F("velocity", "flask_big_yellow", p => p.arrowSpeed < 22f && !p.Hero.Melee, p => p.arrowSpeed *= 1.25f),
+            F("velocity", "flask_big_yellow", p => p.arrowSpeed < 22f && !p.Hero.Melee, p => p.arrowSpeed *= 1.2f),
             F("vampire", "r:742", p => p.vampireEvery == 0 || p.vampireEvery > 4, p => p.vampireEvery = p.vampireEvery == 0 ? 8 : 4),
             F("shield", "r:2113", p => !p.hasShield, p => p.hasShield = true),
             F("luck", "r:668", p => !p.luck, p => p.luck = true),
@@ -81,7 +90,7 @@ namespace RulesShift
         public static RelicDef RandomRelic(PlayerController p)
         {
             var pool = new List<RelicDef>();
-            foreach (var r in Relics.All) if (p == null || !p.Has(r.id)) pool.Add(r);
+            foreach (var r in Relics.All) if (p == null || (!p.Has(r.id) && Relics.Fits(r, p))) pool.Add(r);
             if (pool.Count == 0) return null;
             RunRandom.Shuffle(pool);
             return PickRelic(pool, p);
@@ -101,12 +110,19 @@ namespace RulesShift
             RunRandom.Shuffle(flasks);
 
             var relics = new List<RelicDef>();
-            foreach (var r in Relics.All) if (p == null || !p.Has(r.id)) relics.Add(r);
+            foreach (var r in Relics.All) if (p == null || (!p.Has(r.id) && Relics.Fits(r, p))) relics.Add(r);
             RunRandom.Shuffle(relics);
 
             var result = new List<Upgrade>();
+            bool activeOffered = false;
             for (int i = 0; i < count; i++)
             {
+                // now and then an active item instead (one per chest at most)
+                if (!activeOffered && p != null && !(guaranteeRelic && i == 0) && RunRandom.Value < 0.12f)
+                {
+                    var a = Actives.Random(p);
+                    if (a != null) { result.Add(Upgrade.FromActive(a)); activeOffered = true; continue; }
+                }
                 bool wantRelic = relics.Count > 0 && (RunRandom.Value < relicChance || (guaranteeRelic && i == 0) || flasks.Count == 0);
                 if (wantRelic)
                 {

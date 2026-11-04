@@ -11,7 +11,35 @@ namespace RulesShift
         SpriteRenderer sr;
         Vector2 vel;
         float age, bob;
-        bool magnet;
+        bool magnet, heart;
+
+        /// <summary>A heart from a broken crate: heals half a heart.</summary>
+        public static void Heart(Vector2 pos)
+        {
+            var go = new GameObject("Heart");
+            if (Fx.Root) go.transform.SetParent(Fx.Root, false);
+            go.transform.position = pos;
+            var p = go.AddComponent<Pickup>();
+            p.heart = true;
+            var child = new GameObject("Sprite");
+            child.transform.SetParent(go.transform, false);
+            p.sr = child.AddComponent<SpriteRenderer>();
+            var ga = GameAssets.I;
+            var retro = ga && ga.RetroOn ? ga.Anim("sgq_heart_anim") : new Sprite[0];
+            p.sr.sprite = retro.Length > 0 ? retro[0] : ga ? ga.D("ui_heart_full") : Gfx.Dot;
+            if (!p.sr.sprite) p.sr.sprite = Gfx.Dot;
+            p.sr.sortingOrder = 5;
+            Gfx.Unlit(p.sr);
+            if (retro.Length > 1)
+            {
+                var a = child.AddComponent<SpriteAnimator>();
+                a.target = p.sr;
+                a.Play(retro, 8f);
+            }
+            p.vel = Random.insideUnitCircle.normalized * 2.5f;
+            p.bob = Random.value * 6f;
+            all.Add(p);
+        }
 
         public static void Coins(Vector2 pos, int count)
         {
@@ -27,7 +55,9 @@ namespace RulesShift
             var child = new GameObject("Sprite");
             child.transform.SetParent(go.transform, false);
             p.sr = child.AddComponent<SpriteRenderer>();
-            var frames = GameAssets.I ? GameAssets.I.Anim("coin_anim") : new Sprite[0];
+            var ga = GameAssets.I;
+            var frames = ga ? ga.Anim(ga.RetroOn ? "sgq_coin_anim" : "coin_anim") : new Sprite[0];
+            if (frames.Length == 0 && ga) frames = ga.Anim("coin_anim");
             p.sr.sprite = frames.Length > 0 ? frames[0] : Gfx.Dot;
             p.sr.sortingOrder = 5;
             Gfx.Unlit(p.sr);
@@ -61,13 +91,23 @@ namespace RulesShift
             {
                 Vector2 to = player.Position - pos;
                 float d = to.magnitude;
-                if (d < 1.7f) magnet = true;
+                if (d < (heart ? 1.7f : player.MagnetRadius)) magnet = true;
                 if (magnet) vel = Vector2.MoveTowards(vel, to.normalized * 14f, 60f * dt);
                 if (d < 0.45f)
                 {
-                    if (RoomManager.I) RoomManager.I.AddCoins(1);
-                    Sfx.Play("coin", 0.45f, Random.Range(0.95f, 1.1f));
-                    Fx.Burst(pos, new Color(1f, 0.9f, 0.4f), 3, 1.5f, 0.2f, 1f);
+                    if (heart)
+                    {
+                        player.Heal(1);
+                        Sfx.Play("heal", 0.6f);
+                        Fx.Burst(pos, new Color(1f, 0.35f, 0.4f), 6, 2f, 0.3f, 1.2f);
+                    }
+                    else
+                    {
+                        if (RoomManager.I) RoomManager.I.AddCoins(1);
+                        player.OnCoinPicked();
+                        Sfx.Play("coin", 0.45f, Random.Range(0.95f, 1.1f));
+                        Fx.Burst(pos, new Color(1f, 0.9f, 0.4f), 3, 1.5f, 0.2f, 1f);
+                    }
                     Destroy(gameObject);
                     return;
                 }
