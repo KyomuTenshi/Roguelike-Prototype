@@ -67,7 +67,22 @@ namespace RulesShift
         {
             var kb = Keyboard.current;
             var pad = Gamepad.current;
-            return (kb != null && kb.escapeKey.wasPressedThisFrame) || (pad != null && pad.startButton.wasPressedThisFrame);
+            return (kb != null && kb.escapeKey.wasPressedThisFrame) || (pad != null && pad.startButton.wasPressedThisFrame) || TapSkip();
+        }
+
+        /// <summary>A tap on the "skip" hint in the top right corner (phones).</summary>
+        static bool TapSkip()
+        {
+            var ts = Touchscreen.current;
+            if (ts == null || !ts.primaryTouch.press.wasPressedThisFrame) return false;
+            Vector2 p = ts.primaryTouch.position.ReadValue();
+            return p.x > Screen.width * 0.7f && p.y > Screen.height * 0.82f;
+        }
+
+        static bool TapNext()
+        {
+            var ts = Touchscreen.current;
+            return ts != null && ts.primaryTouch.press.wasPressedThisFrame && !TapSkip();
         }
 
         static bool NextPressed()
@@ -77,7 +92,7 @@ namespace RulesShift
             var pad = Gamepad.current;
             return (kb != null && kb.anyKey.wasPressedThisFrame && !kb.escapeKey.wasPressedThisFrame) ||
                    (mouse != null && mouse.leftButton.wasPressedThisFrame) ||
-                   (pad != null && pad.buttonSouth.wasPressedThisFrame);
+                   (pad != null && pad.buttonSouth.wasPressedThisFrame) || TapNext();
         }
 
         /// <summary>Checks Esc; call every frame of a scene's own loops.</summary>
@@ -299,7 +314,7 @@ namespace RulesShift
             lineText.supportRichText = true;
             lineGroup.alpha = 0f;
 
-            skipHint = UiKit.Text(root, Loc.T("cs.skip"), 16, UiKit.Dim, TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(-150f, -24f), new Vector2(280f, 24f));
+            skipHint = UiKit.Text(root, Loc.T(Binds.UsingTouch ? "cs.skipTouch" : "cs.skip"), 16, UiKit.Dim, TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(-150f, -24f), new Vector2(280f, 24f));
 
             var card = UiKit.Rect(root, "Card", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1100f, 160f));
             cardGroup = card.gameObject.AddComponent<CanvasGroup>();
@@ -328,7 +343,7 @@ namespace RulesShift
         public void Bars(bool on)
         {
             barTarget = on ? BarHeight : 0f;
-            if (skipHint) skipHint.text = Loc.T("cs.skip");
+            if (skipHint) skipHint.text = Loc.T(Binds.UsingTouch ? "cs.skipTouch" : "cs.skip");
         }
 
         /// <summary>The language may have changed since the texts were made (Chinese uses its own font).</summary>
@@ -366,7 +381,7 @@ namespace RulesShift
             cardGroup.alpha = 1f;
             for (float t = 0f; t < hold; t += Time.unscaledDeltaTime)
             {
-                if (t > 0.8f && Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame) break;
+                if (t > 0.8f && Binds.AnyPress()) break;
                 yield return null;
             }
             for (float t = 1f; t > 0f; t -= Time.unscaledDeltaTime / 0.8f) { cardGroup.alpha = t; yield return null; }
