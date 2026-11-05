@@ -3,8 +3,8 @@ using UnityEngine;
 namespace RulesShift
 {
     /// <summary>
-    /// Music with a short crossfade. Real tracks (xDeviruchi pack, see MusicTracks) loop on their
-    /// documented loop points; keys without a track use the procedural chiptune (ProcMusic).
+    /// Music with a short crossfade. Real tracks (see MusicTracks) loop on their loop points; a key with
+    /// variants plays one of them; keys without a track use the procedural chiptune (ProcMusic).
     /// Beat follows the playing track when its tempo is known (Neon), otherwise a steady metronome.
     /// </summary>
     [DefaultExecutionOrder(-90)]
@@ -20,6 +20,8 @@ namespace RulesShift
         AudioSource a, b;
         AudioSource active;
         string currentKey;
+        /// <summary>Key of the music playing now (before variants).</summary>
+        public string CurrentKey => currentKey;
         float bpm = 120f;
         float keyVolume = 1f;
         bool procedural;
@@ -51,18 +53,35 @@ namespace RulesShift
             return s;
         }
 
+        /// <summary>The track for a key: one of its variants that is in the project (a different one than last time when possible).</summary>
+        string Resolve(string key)
+        {
+            var options = MusicTracks.Variants(key);
+            if (options.Length == 0 || !GameAssets.I) return key;
+            var have = new System.Collections.Generic.List<string>();
+            foreach (var o in options) if (GameAssets.I.Music(o)) have.Add(o);
+            if (have.Count == 0) return key;
+            if (have.Count > 1 && lastPick.TryGetValue(key, out var last)) have.Remove(last);
+            string pick = have[Random.Range(0, have.Count)];
+            lastPick[key] = pick;
+            return pick;
+        }
+
+        readonly System.Collections.Generic.Dictionary<string, string> lastPick = new System.Collections.Generic.Dictionary<string, string>();
+
         public void Play(string key)
         {
             if (key == currentKey) return;
             currentKey = key;
+            string resolved = Resolve(key);
 
-            var file = GameAssets.I ? GameAssets.I.Music(key) : null;
+            var file = GameAssets.I ? GameAssets.I.Music(resolved) : null;
             AudioClip clip;
             if (file)
             {
                 clip = file;
                 procedural = false;
-                var info = MusicTracks.Get(key);
+                var info = MusicTracks.Get(resolved);
                 keyVolume = info != null ? info.gain : 1f;
                 synced = info != null && info.bpm > 0f;
                 bpm = synced ? info.bpm : fallbackBpm;
@@ -89,6 +108,31 @@ namespace RulesShift
             active = next;
         }
 
+        AudioSource jingleSource;
+        float jingleEnd, duck = 1f, jingleGain = 1f;
+
+        /// <summary>
+        /// A short one-shot over the music (Peaceful Night, Never Give Up): the music ducks while it plays.
+        /// Missing clip = nothing happens.
+        /// </summary>
+        public void Jingle(string key)
+        {
+            var clip = GameAssets.I ? GameAssets.I.Music(key) : null;
+            if (!clip) return;
+            if (!jingleSource)
+            {
+                jingleSource = gameObject.AddComponent<AudioSource>();
+                jingleSource.playOnAwake = false;
+                jingleSource.loop = false;
+            }
+            var info = MusicTracks.Get(key);
+            jingleGain = info != null ? info.gain : 1f;
+            jingleSource.clip = clip;
+            jingleSource.volume = volume * jingleGain;
+            jingleSource.Play();
+            jingleEnd = Time.unscaledTime + clip.length;
+        }
+
         public void Stop()
         {
             currentKey = null;
@@ -98,8 +142,11 @@ namespace RulesShift
         void Update()
         {
             float step = Time.unscaledDeltaTime / Mathf.Max(0.01f, fadeTime);
-            Fade(a, a == active ? volume * keyVolume : 0f, step);
-            Fade(b, b == active ? volume * keyVolume : 0f, step);
+            // a jingle ducks the music and lets it back in during its last half second
+            duck = Mathf.MoveTowards(duck, Time.unscaledTime < jingleEnd - 0.5f ? 0.15f : 1f, Time.unscaledDeltaTime * 3f);
+            if (jingleSource && jingleSource.isPlaying) jingleSource.volume = volume * jingleGain;
+            Fade(a, a == active ? volume * keyVolume * duck : 0f, step);
+            Fade(b, b == active ? volume * keyVolume * duck : 0f, step);
 
             // seamless loop: after the intro, jump back to the loop start
             if (active && track != null && active.clip)
@@ -143,18 +190,40 @@ namespace RulesShift
 
         public static float Bpm => I != null ? I.bpm : 120f;
 
-        static float latency = -1f;
+        static float latency = -1f, latencyCheck;
 
-        /// <summary>The clip position runs ahead of the speakers by the audio buffer; the beat should match what is heard.</summary>
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        static extern float RulecrawlAudioLatency();
+#endif
+
+        /// <summary>
+        /// The clip position runs ahead of the speakers; the beat should match what is heard. Desktop: the audio
+        /// buffer. Browser: the Web Audio output latency (it changes with headphones, so it is read again every
+        /// two seconds). Plus the player's own correction from the settings (Bluetooth headphones are late).
+        /// </summary>
         static float Latency
         {
             get
             {
-                if (latency >= 0f) return latency;
-                AudioSettings.GetDSPBufferSize(out int length, out int buffers);
-                int rate = AudioSettings.outputSampleRate;
-                latency = rate > 0 ? Mathf.Clamp(length * 2f / rate, 0f, 0.12f) : 0.04f;
-                return latency;
+                float user = SaveSystem.Data.beatOffsetMs / 1000f;
+#if UNITY_WEBGL && !UNITY_EDITOR
+                if (latency < 0f || Time.unscaledTime > latencyCheck)
+                {
+                    latencyCheck = Time.unscaledTime + 2f;
+                    float l = RulecrawlAudioLatency();
+                    latency = l >= 0f ? Mathf.Clamp(l, 0f, 0.4f) : 0.1f;
+                }
+                return latency + user;
+#else
+                if (latency < 0f)
+                {
+                    AudioSettings.GetDSPBufferSize(out int length, out int buffers);
+                    int rate = AudioSettings.outputSampleRate;
+                    latency = rate > 0 ? Mathf.Clamp(length * 2f / rate, 0f, 0.12f) : 0.04f;
+                }
+                return latency + user;
+#endif
             }
         }
     }
