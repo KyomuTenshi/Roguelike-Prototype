@@ -23,6 +23,8 @@ namespace RulesShift
             {
                 string json = PlayerPrefs.GetString(Key, "");
                 data = string.IsNullOrEmpty(json) ? new SaveData() : JsonUtility.FromJson<SaveData>(json);
+                // the first launch on a phone: a bigger HUD (it can be changed in the settings)
+                if (string.IsNullOrEmpty(json) && Application.isMobilePlatform) data.uiScale = 1.15f;
             }
             catch
             {
@@ -33,6 +35,20 @@ namespace RulesShift
             if (data.seenHints == null) data.seenHints = new System.Collections.Generic.List<string>();
             if (data.relics == null) data.relics = new System.Collections.Generic.List<string>();
             if (data.combos == null) data.combos = new System.Collections.Generic.List<string>();
+            if (data.achievements == null) data.achievements = new System.Collections.Generic.List<string>();
+            if (data.history == null) data.history = new System.Collections.Generic.List<RunRecord>();
+            if (data.npcMeets == null) data.npcMeets = new System.Collections.Generic.List<string>();
+            if (data.uiScale < 0.8f || data.uiScale > 1.3f) data.uiScale = 1f;
+        }
+
+        /// <summary>One more meeting with a stuck player; returns how many times you met before.</summary>
+        public static int MeetNpc(string id)
+        {
+            int n = 0;
+            foreach (var m in Data.npcMeets) if (m == id) n++;
+            if (Data.npcMeets.Count < 400) Data.npcMeets.Add(id);
+            Save();
+            return n;
         }
 
         public static void Save()
@@ -46,7 +62,14 @@ namespace RulesShift
         public static void ResetProgress()
         {
             var d = Data;
-            data = new SaveData { music = d.music, sfx = d.sfx, shake = d.shake, lang = d.lang, hints = d.hints };
+            data = new SaveData
+            {
+                music = d.music, sfx = d.sfx, shake = d.shake, lang = d.lang, hints = d.hints,
+                damageNumbers = d.damageNumbers, neonAssist = d.neonAssist, uiScale = d.uiScale,
+                dashKey = d.dashKey, activeKey = d.activeKey, useKey = d.useKey,
+                padDash = d.padDash, padActive = d.padActive, padUse = d.padUse,
+                touchAutoFire = d.touchAutoFire, touchSize = d.touchSize, beatOffsetMs = d.beatOffsetMs
+            };
             Save();
         }
 
