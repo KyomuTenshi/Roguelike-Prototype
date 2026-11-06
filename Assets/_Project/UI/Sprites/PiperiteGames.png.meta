@@ -1,0 +1,572 @@
+fileFormatVersion: 2
+guid: 610c75c1106d845b2a435fec9b781166
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 9037773741986768179
+    second: PiperiteGames_0
+  - first:
+      213: -5560427634556406085
+    second: PiperiteGames_1
+  - first:
+      213: -4328712976423785558
+    second: PiperiteGames_2
+  - first:
+      213: -4694687422839056480
+    second: PiperiteGames_3
+  - first:
+      213: 7598652323551942144
+    second: PiperiteGames_4
+  - first:
+      213: 4070744510901966779
+    second: PiperiteGames_5
+  - first:
+      213: 136207477326314307
+    second: PiperiteGames_6
+  - first:
+      213: 1341295824230144047
+    second: PiperiteGames_7
+  - first:
+      213: 2819952119850320205
+    second: PiperiteGames_8
+  - first:
+      213: -3464880956561707454
+    second: PiperiteGames_9
+  - first:
+      213: -2335024872112289909
+    second: PiperiteGames_10
+  - first:
+      213: 944878414221945981
+    second: PiperiteGames_11
+  - first:
+      213: -7285858561199805653
+    second: PiperiteGames_12
+  - first:
+      213: -3341760847287919499
+    second: PiperiteGames_13
+  - first:
+      213: 5424472749586149999
+    second: PiperiteGames_14
+  - first:
+      213: 4711532842769536565
+    second: PiperiteGames_15
+  - first:
+      213: -4762556849974975240
+    second: PiperiteGames_16
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: PiperiteGames_0
+      rect:
+        serializedVersion: 2
+        x: 320
+        y: 868
+        width: 430
+        height: 339
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 335697b855f9c6d70800000000000000
+      internalID: 9037773741986768179
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_1
+      rect:
+        serializedVersion: 2
+        x: 365
+        y: 364
+        width: 592
+        height: 663
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bb6fffad68465d2b0800000000000000
+      internalID: -5560427634556406085
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_2
+      rect:
+        serializedVersion: 2
+        x: 125
+        y: 133
+        width: 132
+        height: 185
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: aabe2a18b725de3c0800000000000000
+      internalID: -4328712976423785558
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_3
+      rect:
+        serializedVersion: 2
+        x: 288
+        y: 183
+        width: 38
+        height: 135
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0a71f2699ae19deb0800000000000000
+      internalID: -4694687422839056480
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_4
+      rect:
+        serializedVersion: 2
+        x: 364
+        y: 158
+        width: 114
+        height: 160
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 00692056706d37960800000000000000
+      internalID: 7598652323551942144
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_5
+      rect:
+        serializedVersion: 2
+        x: 513
+        y: 183
+        width: 100
+        height: 135
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bb7deaf90903e7830800000000000000
+      internalID: 4070744510901966779
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_6
+      rect:
+        serializedVersion: 2
+        x: 649
+        y: 141
+        width: 145
+        height: 177
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 34b79cd9af7e3e100800000000000000
+      internalID: 136207477326314307
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_7
+      rect:
+        serializedVersion: 2
+        x: 806
+        y: 183
+        width: 31
+        height: 135
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f28d3f5127d3d9210800000000000000
+      internalID: 1341295824230144047
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_8
+      rect:
+        serializedVersion: 2
+        x: 874
+        y: 183
+        width: 113
+        height: 135
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d41c943238b722720800000000000000
+      internalID: 2819952119850320205
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_9
+      rect:
+        serializedVersion: 2
+        x: 1017
+        y: 181
+        width: 112
+        height: 137
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 24eaf13b0254aefc0800000000000000
+      internalID: -3464880956561707454
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_10
+      rect:
+        serializedVersion: 2
+        x: 309
+        y: 114
+        width: 135
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b878b041043589fd0800000000000000
+      internalID: -2335024872112289909
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_11
+      rect:
+        serializedVersion: 2
+        x: 479
+        y: 101
+        width: 35
+        height: 37
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d7c22ab59e1ec1d00800000000000000
+      internalID: 944878414221945981
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_12
+      rect:
+        serializedVersion: 2
+        x: 547
+        y: 102
+        width: 33
+        height: 35
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b2b62ff9d3e63ea90800000000000000
+      internalID: -7285858561199805653
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_13
+      rect:
+        serializedVersion: 2
+        x: 614
+        y: 102
+        width: 31
+        height: 35
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 57c581df63eaf91d0800000000000000
+      internalID: -3341760847287919499
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_14
+      rect:
+        serializedVersion: 2
+        x: 682
+        y: 102
+        width: 24
+        height: 35
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f627ed4c939974b40800000000000000
+      internalID: 5424472749586149999
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_15
+      rect:
+        serializedVersion: 2
+        x: 741
+        y: 102
+        width: 29
+        height: 36
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5365dd0682ab26140800000000000000
+      internalID: 4711532842769536565
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: PiperiteGames_16
+      rect:
+        serializedVersion: 2
+        x: 809
+        y: 114
+        width: 136
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8f463ae27cff7edb0800000000000000
+      internalID: -4762556849974975240
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      PiperiteGames_0: 9037773741986768179
+      PiperiteGames_1: -5560427634556406085
+      PiperiteGames_10: -2335024872112289909
+      PiperiteGames_11: 944878414221945981
+      PiperiteGames_12: -7285858561199805653
+      PiperiteGames_13: -3341760847287919499
+      PiperiteGames_14: 5424472749586149999
+      PiperiteGames_15: 4711532842769536565
+      PiperiteGames_16: -4762556849974975240
+      PiperiteGames_2: -4328712976423785558
+      PiperiteGames_3: -4694687422839056480
+      PiperiteGames_4: 7598652323551942144
+      PiperiteGames_5: 4070744510901966779
+      PiperiteGames_6: 136207477326314307
+      PiperiteGames_7: 1341295824230144047
+      PiperiteGames_8: 2819952119850320205
+      PiperiteGames_9: -3464880956561707454
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
