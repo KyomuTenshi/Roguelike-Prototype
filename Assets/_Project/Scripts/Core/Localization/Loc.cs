@@ -74,6 +74,17 @@ namespace RulesShift
 
         public static bool Has(string key) => key != null && Strings.Table.ContainsKey(key);
 
+        /// <summary>
+        /// The text for the device in hand: "key.touch" on a phone, "key.pad" with a gamepad, otherwise "key"
+        /// (hints and rules that name keys).
+        /// </summary>
+        public static string TDevice(string key)
+        {
+            if (Binds.UsingTouch && Has(key + ".touch")) return T(key + ".touch");
+            if (Binds.UsingPad && Has(key + ".pad")) return T(key + ".pad");
+            return T(key);
+        }
+
         /// <summary>Name of a language in that language (for the settings selector).</summary>
         public static string Name(Lang l) => Strings.Table["lang.name"][(int)l];
 
