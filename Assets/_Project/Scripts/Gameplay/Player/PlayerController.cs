@@ -10,7 +10,7 @@ namespace RulesShift
     /// so leaving a room only needs Rules.Apply(nextLaw) — nothing on the player has to be undone.
     /// </summary>
     [DefaultExecutionOrder(-10)]
-    public class PlayerController : MonoBehaviour, IDamageable
+    public partial class PlayerController : MonoBehaviour, IDamageable
     {
         public static PlayerController I { get; private set; }
 
@@ -18,7 +18,7 @@ namespace RulesShift
         public int maxHalves = 6;      // 2 halves = 1 heart
         public int halves = 6;
         public float moveSpeed = 5.2f;
-        public int damage = 1;
+        public float damage = 1f;
         public float fireRate = 3.2f;  // shots per second
         public int shots = 1;
         public int pierce;
@@ -60,10 +60,10 @@ namespace RulesShift
             {
                 float d = damage + (lawBuff > 0f ? 1f : 0f);
                 float m = 1f;
-                if (Has(RelicId.Codex) && RoomManager.I) m += 0.1f * RoomManager.I.RoomsPassed;
+                if (Has(RelicId.Codex) && RoomManager.I) m += Mathf.Min(1f, 0.1f * RoomManager.I.RoomsPassed);   // up to +100%
                 if (Has(RelicId.Berserk) && halves <= 2) m += 0.5f;
                 if (HasCombo(ComboId.Frenzy) && halves * 2 <= maxHalves) m += 1f;
-                return d * m;
+                return d * m * RelicDamageMul();
             }
         }
         string skin = "elf_m";
@@ -72,6 +72,7 @@ namespace RulesShift
 
         [HideInInspector] public Light2D heroLight;
         [HideInInspector] public bool frozen;
+        [HideInInspector] public bool godMode;          // the debug menu (F1)
         [HideInInspector] public Vector2 scriptedMove;   // cutscenes walk the hero while frozen
 
         Rigidbody2D rb;
@@ -116,6 +117,7 @@ namespace RulesShift
         void Build()
         {
             I = this;
+            EnemyPace = 1f;
             cam = Camera.main;
             gameObject.AddComponent<UnityEngine.Rendering.SortingGroup>();
             rb = gameObject.AddComponent<Rigidbody2D>();
@@ -225,6 +227,22 @@ namespace RulesShift
             charging = false;
             charge = 0f;
             dashTime = 0f;
+            RelicRoomReset();
+            RefreshSkin();
+        }
+
+        /// <summary>In Retro rooms the Elf becomes the 8-bit elf of the SGQ pack (and back outside them).</summary>
+        public void RefreshSkin()
+        {
+            var a = GameAssets.I;
+            if (!a || Hero == null || !anim) return;
+            string want = Hero.skin == "elf_m" && a.RetroOn && a.HasAnim("sgq_elf_idle_anim") ? "sgq_elf" : Hero.skin;
+            if (want == skin) return;
+            skin = want;
+            idle = a.Anim(skin + "_idle_anim");
+            run = a.Anim(skin + "_run_anim");
+            hurtFrames = a.Anim(skin + "_hit_anim");
+            anim.Play(idle, 8f, true);
         }
 
         // ---------- relics ----------
@@ -246,6 +264,9 @@ namespace RulesShift
                 case RelicId.Orbit:
                     OrbitBlades.Ensure(this).SetCount(1);
                     break;
+                default:
+                    RelicPickedUp(id);
+                    break;
             }
             foreach (var c in Relics.Combos)
             {
@@ -254,11 +275,13 @@ namespace RulesShift
                 comboOrder.Add(c.id);
                 SaveSystem.DiscoverCombo(c.key);
                 if (c.id == ComboId.Blades) OrbitBlades.Ensure(this).SetCount(3);
+                ComboFormed(c.id);
                 Sfx.Play("law", 0.8f, 1.3f);
                 Fx.Burst(Position, new Color(1f, 0.85f, 0.3f), 24, 5f, 0.6f, 2f);
                 Fx.Anim("firework", Position, 1f);
                 if (Hud.I) Hud.I.ShowCombo(c);
             }
+            Achievements.CheckHero(this);
             SaveSystem.Save();
         }
 
@@ -266,6 +289,7 @@ namespace RulesShift
         public void OnLawChanged()
         {
             if (dead) return;
+            RefreshSkin();
             if (Has(RelicId.Lawkeeper))
             {
                 lawBuff = 6f;
@@ -305,12 +329,15 @@ namespace RulesShift
             if (Has(RelicId.Blast)) m.blast = HasCombo(ComboId.Napalm) ? 1.9f : 1.3f;
             if (HasCombo(ComboId.Napalm)) m.napalm = true;
             if (Has(RelicId.Crit)) m.crit = 0.15f;
+            if (Has(RelicId.LuckyCoin)) m.crit += 0.1f;
+            if (Has(RelicId.Ghost)) m.spectral = true;
             return m;
         }
 
         /// <summary>An enemy died (souls, plague).</summary>
         public void OnEnemyDied(Vector2 pos, Status st)
         {
+            RelicKill(pos, st);
             if (Has(RelicId.Soul) && !Rules.ShotsHeal)
                 Projectile.Soul(pos, Damage, HasCombo(ComboId.Souls));
             if (HasCombo(ComboId.Plague) && st != null && (st.Burning || st.Poisoned))
@@ -367,7 +394,10 @@ namespace RulesShift
             lawHealCd -= dt;
             dashCd -= dt;
             cooldown -= dt;
+            RelicTimers(dt);
+            ActiveTimers(dt);
             hintCooldown -= dt;
+            LowHealthBeat(dt);
             recoil = Mathf.MoveTowards(recoil, 0f, dt * 4f);
 
             if (frozen && !dead && scriptedMove.sqrMagnitude > 0.0001f)
@@ -390,7 +420,8 @@ namespace RulesShift
             ReadInput(out Vector2 move, out bool fire, out Vector2 aimDir, out bool dash);
 
             // --- movement with the law's modifiers ---
-            if (Rules.InvertMove) move = -move;
+            if (Rules.InvertMove && !Has(RelicId.Compass)) move = -move;
+            movingNow = move.sqrMagnitude > 0.04f;
             if (dash && dashCd <= 0f)
             {
                 if (Hero.blink) Blink(move);
@@ -399,6 +430,8 @@ namespace RulesShift
             if (dashTime > 0f)
             {
                 dashTime -= dt;
+                DashTick();
+                if (dashTime <= 0f) DashEnded(Feet);
                 vel = dashDir * 15f;
                 rb.linearVelocity = vel;
                 if (Random.value < 0.6f) Fx.Burst(Position, new Color(0.6f, 1f, 0.9f, 0.7f), 2, 0.5f, 0.25f, 1.5f);
@@ -406,10 +439,19 @@ namespace RulesShift
             }
             else
             {
-                Vector2 target = Rules.BeatMove ? BeatHop(move, dt) : move * moveSpeed;
-                vel = Rules.Accel > 0f ? Vector2.MoveTowards(vel, target, Rules.Accel * dt) : target;
-                rb.linearVelocity = vel;
+                Vector2 target = Rules.BeatMove ? BeatHop(move, dt) : move * EffectiveSpeed;
+                float accel = Has(RelicId.Skates) ? 0f : Rules.Accel;
+                vel = accel > 0f ? Vector2.MoveTowards(vel, target, accel * dt) : target;
+                rb.linearVelocity = vel + Rules.Pull(Feet);
             }
+            // the Time law: the world moves while you move (shooting nudges it a bit)
+            if (Rules.TimeFlow)
+            {
+                bool acting = move.sqrMagnitude > 0.04f || dashTime > 0f;
+                float want = acting ? 1f : fire ? 0.45f : 0.12f;
+                Rules.WorldTime = Mathf.MoveTowards(Rules.WorldTime, want, dt * (want > Rules.WorldTime ? 8f : 3f));
+            }
+            else Rules.WorldTime = 1f;
 
             // --- aim & shoot ---
             if (aimDir.sqrMagnitude > 0.0001f) aim = aimDir.normalized;
@@ -429,6 +471,8 @@ namespace RulesShift
             body.flipX = aim.x < 0f;
 
             bool still = move.sqrMagnitude < 0.01f && vel.magnitude < 0.8f;
+            RelicTick(dt);
+            ActiveInput();
             if (Hero.weapon == WeaponKind.Staff) StaffTick(fire, still, dt);
             else if (fire && cooldown <= 0f)
             {
@@ -450,8 +494,8 @@ namespace RulesShift
         {
             dashDir = move.sqrMagnitude > 0.01f ? move.normalized : aim;
             dashTime = 0.16f;
-            dashCd = 0.8f;
-            invuln = Mathf.Max(invuln, 0.3f);
+            dashCd = DashCooldown(0.8f);
+            invuln = Mathf.Max(invuln, DashInvuln(Has(RelicId.Phase) ? 0.55f : 0.3f));
             rammed.Clear();
             Fx.Anim("dust", Feet + Vector2.up * 0.3f, 0.5f, Mathf.Atan2(-dashDir.y, -dashDir.x) * Mathf.Rad2Deg);
             Sfx.Play("dash", 0.7f);
@@ -467,23 +511,25 @@ namespace RulesShift
             }
         }
 
+        public bool DashReady => dashCd <= 0f && dashTime <= 0f;
+
         void ReadInput(out Vector2 move, out bool fire, out Vector2 aimDir, out bool dash)
         {
             move = Vector2.zero;
             fire = false;
-            dash = false;
+            dash = Binds.DashDown();
             aimDir = Vector2.zero;
             var kb = Keyboard.current;
             if (kb != null)
             {
-                if (kb.leftShiftKey.wasPressedThisFrame || kb.rightShiftKey.wasPressedThisFrame) dash = true;
                 if (kb.wKey.isPressed || kb.upArrowKey.isPressed) move.y += 1f;
                 if (kb.sKey.isPressed || kb.downArrowKey.isPressed) move.y -= 1f;
                 if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) move.x -= 1f;
                 if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) move.x += 1f;
                 if (kb.spaceKey.isPressed) fire = true;
             }
-            var mouse = Mouse.current;
+            // a phone browser also turns taps into mouse clicks: with the touch controls on, the mouse is ignored
+            var mouse = TouchInput.Active ? null : Mouse.current;
             if (mouse != null && cam)
             {
                 Vector3 mp = mouse.position.ReadValue();
@@ -500,43 +546,115 @@ namespace RulesShift
                 if (ls.sqrMagnitude > 0.04f) move = ls;
                 Vector2 rs = pad.rightStick.ReadValue();
                 if (rs.sqrMagnitude > 0.09f) { aimDir = rs; fire = true; }
-                if (pad.rightTrigger.isPressed) fire = true;
-                if (pad.buttonSouth.wasPressedThisFrame || pad.leftTrigger.wasPressedThisFrame) dash = true;
+                if (pad.rightTrigger.isPressed && Binds.PadDash != "rt" && Binds.PadActive != "rt" && Binds.PadUse != "rt") fire = true;
             }
+            if (TouchInput.Active) TouchAim(ref move, ref fire, ref aimDir);
             if (move.sqrMagnitude > 1f) move.Normalize();
         }
 
-        // ---------- Neon: one hop per beat ----------
+        /// <summary>
+        /// Phone: the left stick moves, the right stick aims and shoots. With auto-fire on (settings), letting go of the
+        /// aim stick shoots at the nearest enemy in reach — but never under laws where a shot hurts you (healing shots,
+        /// paid shots, sleeping enemies).
+        /// </summary>
+        bool touchAimHeld;
 
-        const float HopTime = 0.15f;
+        void TouchAim(ref Vector2 move, ref bool fire, ref Vector2 aimDir)
+        {
+            if (TouchInput.Move.sqrMagnitude > 0.0001f) move = TouchInput.Move;
+            bool wasHeld = touchAimHeld;
+            touchAimHeld = TouchInput.AimHeld;
+            if (TouchInput.AimHeld) { aimDir = TouchInput.Aim; fire = true; return; }
+            aimDir = Vector2.zero;
+            if (wasHeld) return;   // the thumb just left the stick: this frame lets the staff's orb go where it aimed
+            if (!SaveSystem.Data.touchAutoFire || Rules.ShotsHeal || Rules.Inflation || Rules.Stealth) return;
+            float reach = Hero.Melee ? 2.6f : 9f;
+            if (Rules.Vision > 0f) reach = Mathf.Min(reach, Rules.Vision * VisionMul);   // the Crypt: only what you can see
+            float best = reach * reach;
+            Vector2 target = Vector2.zero;
+            bool found = false;
+            foreach (var e in Enemy.All)
+            {
+                if (!e || !e.Alive) continue;
+                float d = (e.Position - Position).sqrMagnitude;
+                if (d < best) { best = d; target = e.Position; found = true; }
+            }
+            var b = Bosses.Current;
+            if (b != null && (b.Position - Position).sqrMagnitude < (reach + 1.5f) * (reach + 1.5f) && !found)
+            {
+                target = b.Position;
+                found = true;
+            }
+            if (!found) return;
+            aimDir = target - Position;
+            // the staff charges while firing: auto-fire lets a full orb go and starts the next one
+            fire = !(Hero.weapon == WeaponKind.Staff && charging && charge >= 1f);
+        }
+
+        // ---------- Neon: the rhythm ----------
+
+        const float HopTime = 0.18f;
         float hopTime;
-        Vector2 hopDir;
-        int lastHopBeat = int.MinValue;
+        Vector2 hopDir, prevMove;
+        int lastHopBeat = int.MinValue, grooveBeat = int.MinValue, groove;
+
+        /// <summary>Hits in a row on the beat (0-4): the hero gets faster with each one.</summary>
+        public int Groove => Rules.BeatMove ? groove : 0;
 
         /// <summary>
-        /// Neon law: the hero stands still between beats and hops once on each beat while a direction is held.
-        /// A slightly early or late press still lands on that beat.
+        /// Neon law: the hero always walks (a bit slower), but a direction pressed on the beat makes a long hop
+        /// and builds the groove — every hit in a row makes walking and hopping faster. A press off the beat
+        /// breaks the groove; two beats without a hit let it fade. A slightly early or late press still counts.
         /// </summary>
         Vector2 BeatHop(Vector2 move, float dt)
         {
-            int beat = Mathf.FloorToInt(MusicPlayer.Beat + 0.08f);
-            if (hopTime <= 0f && move.sqrMagnitude > 0.04f && OnBeat() && beat != lastHopBeat)
+            int beat = Mathf.FloorToInt(MusicPlayer.Beat + 0.16f);
+            bool moving = move.sqrMagnitude > 0.04f;
+            bool fresh = moving && (prevMove.sqrMagnitude <= 0.04f || Vector2.Angle(prevMove, move) > 40f);
+            // rhythm assist (settings): holding a direction hops on every beat by itself
+            if (SaveSystem.Data.neonAssist && moving && OnBeat() && beat != lastHopBeat) fresh = true;
+            prevMove = move;
+            if (groove > 0 && beat - grooveBeat > 2) groove = 0;   // the groove fades without hits
+
+            if (fresh && hopTime <= 0f)
             {
-                lastHopBeat = beat;
-                hopTime = HopTime;
-                hopDir = move.normalized;
-                Fx.Burst(Feet, new Color(1f, 0.35f, 0.9f, 0.8f), 5, 1.6f, 0.25f, 1.2f);
+                if (OnBeat() && beat != lastHopBeat)
+                {
+                    lastHopBeat = beat;
+                    groove = beat == grooveBeat ? groove : Mathf.Min(4, groove + 1);
+                    if (groove >= 4) Achievements.Unlock("groove");
+                    grooveBeat = beat;
+                    hopTime = HopTime;
+                    hopDir = move.normalized;
+                    OnNeonHop();
+                    Fx.Burst(Feet, new Color(1f, 0.35f, 0.9f, 0.9f), 6 + groove * 2, 1.8f + groove * 0.3f, 0.3f, 1.3f);
+                    if (groove >= 2) Fx.Anim("music", Position + Vector2.up * 0.4f, 0.25f + groove * 0.05f, Random.Range(-20f, 20f), 36);
+                    Fx.Text(Position + Vector2.up * 1f, Loc.F("fx.groove", groove), Color.Lerp(new Color(1f, 0.45f, 0.9f), new Color(0.4f, 1f, 1f), groove / 4f), 0.7f, 0.5f);
+                }
+                else if (!OnBeat() && groove > 0)
+                {
+                    groove = 0;
+                    Fx.Text(Position + Vector2.up * 1f, Loc.T("fx.offbeat"), new Color(0.7f, 0.6f, 0.8f), 0.6f, 0.5f);
+                }
             }
-            if (hopTime <= 0f) return Vector2.zero;
-            hopTime -= dt;
-            return hopDir * moveSpeed * 2.4f;
+            float boost = 1f + 0.1f * groove;
+            if (hopTime > 0f)
+            {
+                hopTime -= dt;
+                return hopDir * EffectiveSpeed * 2.6f * boost;
+            }
+            return move * EffectiveSpeed * 0.7f * boost;   // between the beats: always walking, faster with the groove
         }
 
         public static bool OnBeat()
         {
             float b = MusicPlayer.Beat;
             float f = b - Mathf.Floor(b);
-            return f < 0.24f || f > 0.92f;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return f < 0.34f || f > 0.78f;   // browsers deliver input and frames less evenly: a wider window
+#else
+            return f < 0.3f || f > 0.84f;
+#endif
         }
 
         void StillHint()
@@ -550,16 +668,18 @@ namespace RulesShift
 
         void Swing()
         {
-            cooldown = 1f / fireRate;
+            cooldown = 1f / EffectiveRate;
             swingTime = SwingTime;
             swingSign = -swingSign;
             Vector2 c = Position;
             var mods = GetShotMods();
-            float dmg = Damage;
+            float dmg = Damage * InflationPay();
             foreach (var e in Enemy.All.ToArray())
                 if (e && e.Alive && InArc(e.Position, 0f)) MeleeHit(e, dmg, mods);
             var b = Bosses.Current;
             if (b != null && InArc(b.Position, 0.8f)) MeleeHit(b, dmg, mods);
+            foreach (var br in Breakable.All.ToArray())
+                if (br && br.Alive && InArc(br.Position, 0f)) MeleeHit(br, dmg, mods);
 
             if (Projectile.Reflect(c, aim, SwingRange + 0.4f, SwingHalfArc + 10f, dmg, mods) > 0)
                 Sfx.Play("button", 0.6f, 1.5f);
@@ -590,7 +710,9 @@ namespace RulesShift
             }
             Vector2 dir = (t.Position - Position).normalized;
             Fx.Anim("slash", t.Position, 0.5f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg);
+            dmg = PreHit(t, dmg, Position);
             t.Hit(dmg, dir);
+            PostHit(t, dmg, dir);
             Projectile.ApplyStatus(t, mods);
             Projectile.SplitShards(t, dir, 10f, dmg, mods, new Color(1f, 0.95f, 0.8f));
             if (mods.blast > 0f) Projectile.Explosion(t.Position, mods.blast, Mathf.Max(0.5f, dmg * 0.6f), mods.napalm);
@@ -623,20 +745,22 @@ namespace RulesShift
 
         void FireOrb(float c)
         {
-            cooldown = 1f / fireRate;
+            cooldown = 1f / EffectiveRate;
             recoil = 1f;
             var mods = GetShotMods();
             if (c >= 0.98f) mods.blast = Mathf.Max(mods.blast, 1.7f);
-            float dmg = Damage * (1f + 2.5f * c);
-            float size = 1f + 1.2f * c;
-            int pr = pierce + (c > 0.5f ? 1 : 0);
+            float dmg = Damage * (1f + 2.5f * c) * InflationPay();
+            float size = (1f + 1.2f * c) * ShotSize;
+            int pr = TotalPierce + (c > 0.5f ? 1 : 0);
             Vector2 origin = (Vector2)bowPivot.position + aim * (0.55f + weaponHalf);
-            for (int i = 0; i < shots; i++)
+            int n = TotalShots;
+            for (int i = 0; i < n; i++)
             {
-                float off = (i - (shots - 1) / 2f) * 12f;
+                float off = (i - (n - 1) / 2f) * 12f;
                 Vector2 dir = Quaternion.Euler(0f, 0f, off) * aim;
-                Projectile.Hero(origin, dir, Hero, arrowSpeed * (1f - 0.3f * c), dmg, pr, mods, size);
+                Projectile.Hero(origin, dir, Hero, ShotSpeed * (1f - 0.3f * c), dmg * ShotMul(), pr, mods, size);
             }
+            ShotExtras(origin, dmg, mods, size);
             Sfx.Play(c > 0.9f ? "blink" : "shoot", 0.7f, 1.3f - 0.4f * c);
         }
 
@@ -654,40 +778,49 @@ namespace RulesShift
                 end = p;
             }
             if ((end - start).sqrMagnitude < 0.3f) return;
-            dashCd = Has(RelicId.Dash) ? 1.2f : 2f;
+            dashCd = DashCooldown(Has(RelicId.Dash) ? 1.2f : 2f);
             if (!Fx.Anim("warp", Position, 0.5f)) Fx.Burst(Position, Hero.projColor, 14, 3f, 0.35f, 1.5f);
             Teleport(end);
-            invuln = Mathf.Max(invuln, 0.35f);
+            invuln = Mathf.Max(invuln, DashInvuln(0.35f));
             if (!Fx.Anim("warp", Position, 0.5f)) Fx.Burst(Position, Hero.projColor, 14, 3f, 0.35f, 1.5f);
             Sfx.Play("blink", 0.8f);
             if (HasCombo(ComboId.Ram)) { dashDir = dir; rammed.Clear(); Ram(); }
+            if (Has(RelicId.Phase)) Projectile.ClearEnemyNear(Position, 2.2f);
+            DashEnded(end);
         }
 
         // ---------- Elf / Lizard: projectiles ----------
 
         void Shoot()
         {
-            cooldown = 1f / fireRate;
+            cooldown = 1f / EffectiveRate;
             recoil = 1f;
             Vector2 origin = (Vector2)bowPivot.position + aim * (0.55f + weaponHalf);
             float spread = 9f;
             var mods = GetShotMods();
-            float dmg = Damage;
-            for (int i = 0; i < shots; i++)
+            float dmg = Damage * InflationPay();
+            float size = ShotSize;
+            bool empowered = NextShotEmpowered(ref mods, ref dmg, ref size, out int extraPierce);
+            int n = TotalShots;
+            float mul = ShotMul();
+            for (int i = 0; i < n; i++)
             {
-                float off = (i - (shots - 1) / 2f) * spread;
+                float off = (i - (n - 1) / 2f) * spread;
                 Vector2 dir = Quaternion.Euler(0f, 0f, off) * aim;
-                Projectile.Hero(origin, dir, Hero, arrowSpeed, dmg, pierce, mods);
+                Projectile.Hero(origin, dir, Hero, ShotSpeed, dmg * mul, TotalPierce + extraPierce, mods, size);
             }
-            Sfx.Play("shoot", 0.7f);
+            ShotExtras(origin, Damage, GetShotMods(), ShotSize);
+            Sfx.Play("shoot", empowered ? 0.9f : 0.7f, empowered ? 0.8f : 1f);
         }
 
         // ---------- damage ----------
 
         public bool Hit(float damageIn, Vector2 dir)
         {
-            if (dead || frozen || invuln > 0f) return false;
+            if (dead || frozen || invuln > 0f || godMode) return false;
             int dmg = Mathf.Max(1, Mathf.RoundToInt(damageIn));
+            if (!Rules.OneHit && AvoidHit(dir)) return false;
+            if (Has(RelicId.Armor) && !Rules.OneHit) dmg = 1;
             if (shieldReady && !Rules.OneHit)
             {
                 shieldReady = false;
@@ -705,16 +838,29 @@ namespace RulesShift
                     if (e && Vector2.Distance(e.Position, Position) < 2.3f) e.Hit(3, e.Position - Position);
             }
             hurtThisRoom = true;
+            Juice.HitStop(0.06f);
             if (Rules.OneHit) halves = 0;
             else halves -= dmg;
             invuln = 1.0f;
             hurtTime = 0.25f;
-            rb.linearVelocity = dir.normalized * 6f;
+            rb.linearVelocity = HasCombo(ComboId.Juggernaut) ? Vector2.zero : dir.normalized * 6f;
+            if (halves > 0) AfterHurt();
             Sfx.Play("hurt");
             if (CameraFollow.I) CameraFollow.I.Shake(0.25f);
             if (!Fx.Anim("blood", Position, 0.5f, Random.Range(0f, 360f))) Fx.Burst(Position, new Color(1f, 0.25f, 0.25f), 8, 3.5f, 0.4f, 1.5f);
-            if (halves <= 0) Die();
+            if (halves <= 0 && !TryOneUp()) Die();
             return true;
+        }
+
+        float heartbeatTimer;
+
+        /// <summary>Half a heart left: a heartbeat line pulses over the hero every second and a half.</summary>
+        void LowHealthBeat(float dt)
+        {
+            if (dead || halves > 1 || maxHalves <= 2 || frozen) { heartbeatTimer = 0.5f; return; }
+            if ((heartbeatTimer -= dt) > 0f) return;
+            heartbeatTimer = 1.5f;
+            Fx.Anim("heartbeat", Position + Vector2.up * 1.5f, 0.45f, 0f, 40, new Color(1f, 0.45f, 0.45f), transform);
         }
 
         void Die()
@@ -725,6 +871,7 @@ namespace RulesShift
             bow.enabled = false;
             Fx.Burst(Position, new Color(1f, 0.3f, 0.3f), 24, 5f, 0.8f, 2f);
             Fx.Anim("death", Position, 1f);
+            Fx.Anim("gameover", Position + Vector2.up * 2.4f, 0.3f, 0f, 60);
             Sfx.Play("kill", 1f, 0.7f);
             if (RoomManager.I) RoomManager.I.OnPlayerDied();
         }
