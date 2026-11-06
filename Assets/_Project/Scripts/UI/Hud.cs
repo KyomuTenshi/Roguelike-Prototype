@@ -22,7 +22,11 @@ namespace RulesShift
         const float HintHold = 6.5f;
 
         RectTransform root;
-        RectTransform leftPlate, rightPlate, relicRow;
+        RectTransform leftPlate, rightPlate, relicRow, activePlate;
+        Image activeIcon;
+        Image[] activePips;
+        ActiveId shownActive = ActiveId.None;
+        int shownCharge = -1;
         Image[] hearts;
         Text objective, counter, lawChip, toast, scoreText, shieldText;
         CanvasGroup objectiveGroup;
@@ -37,6 +41,7 @@ namespace RulesShift
         RectTransform beat;
         Image beatDot, beatRing;
         GameObject upgradePanel;
+        RectTransform mapPanel;
         Action<Upgrade> onPick;
         Upgrade[] options;
         Image fade, hurtFlash;
@@ -50,6 +55,15 @@ namespace RulesShift
         readonly Queue<string> hints = new Queue<string>();
         int lastHalves = -1, lastMax = -1, targetScore, relicCount = -1;
         float hurtAlpha, objectiveAge, scoreMul = 1f;
+        Color flashColor = new Color(0.8f, 0.05f, 0.05f);
+
+        /// <summary>A coloured flash over the screen (Juice: crits, a boss dies).</summary>
+        public void Flash(Color c, float alpha)
+        {
+            if (alpha < hurtAlpha) return;
+            flashColor = c;
+            hurtAlpha = alpha;
+        }
         string objectiveRaw = "";
         Texture2D currentCursor;
 
@@ -97,7 +111,7 @@ namespace RulesShift
             if (I == null || !SaveSystem.Data.hints || !Loc.Has("hint." + id)) return;
             if (!SaveSystem.FirstTime(id)) return;
             SaveSystem.Save();
-            I.hints.Enqueue(Loc.T("hint." + id));
+            I.hints.Enqueue(Loc.F("pixie.say", Loc.TDevice("hint." + id)));
             if (I.hintRoutine == null) I.hintRoutine = I.StartCoroutine(I.HintRoutine());
         }
 
@@ -189,6 +203,7 @@ namespace RulesShift
             options = opts;
             onPick = pick;
             upgradePanel.SetActive(true);
+            if (pickHint) pickHint.text = Loc.TDevice("hud.pickHint");   // keys, gamepad or a tap
             BuildUpgradeCards();
             UiAnim.FadeIn(upgradePanel.GetComponent<CanvasGroup>(), 0.15f);
         }
@@ -204,10 +219,15 @@ namespace RulesShift
             leftPlate.gameObject.SetActive(playing);
             rightPlate.gameObject.SetActive(playing);
             relicRow.gameObject.SetActive(playing);
+            if (safeArea && Screen.safeArea != lastSafe) FitSafeArea();   // the phone was turned around
+            if (MapOpen && (!playing || state != GameState.Playing)) { Destroy(mapPanel.gameObject); mapPanel = null; }
+            // on a phone the round touch button shows the active item instead (this corner belongs to the aim stick)
+            activePlate.gameObject.SetActive(playing && p.Active != null && !TouchInput.Active);
             if (playing)
             {
                 UpdateHearts(p);
                 UpdateRelics(p);
+                UpdateActive(p);
             }
             else { lastHalves = -1; lastMax = -1; relicCount = -1; }
 
@@ -256,6 +276,10 @@ namespace RulesShift
                 bool on = PlayerController.OnBeat();
                 beatDot.color = on ? new Color(0.3f, 1f, 1f) : new Color(0.6f, 0.4f, 0.8f, 0.6f);
                 beatRing.color = on ? new Color(1f, 0.3f, 0.9f) : new Color(0.5f, 0.3f, 0.6f, 0.6f);
+                // the groove (hits on the beat in a row) widens the ring and turns it cyan
+                int groove = PlayerController.I ? PlayerController.I.Groove : 0;
+                beatRing.rectTransform.localScale = Vector3.one * (1f + 0.12f * groove);
+                if (groove > 0) beatRing.color = Color.Lerp(beatRing.color, new Color(0.4f, 1f, 1f), groove / 4f);
             }
 
             noteAlpha = Mathf.MoveTowards(noteAlpha, noteShown && playing ? 1f : 0f, Time.unscaledDeltaTime * 6f);
@@ -264,7 +288,7 @@ namespace RulesShift
 
             hurtAlpha = Mathf.MoveTowards(hurtAlpha, 0f, Time.unscaledDeltaTime * 1.6f);
             hurtFlash.enabled = hurtAlpha > 0.01f;
-            hurtFlash.color = new Color(0.8f, 0.05f, 0.05f, hurtAlpha);
+            hurtFlash.color = new Color(flashColor.r, flashColor.g, flashColor.b, hurtAlpha);
 
             if (upgradePanel.activeSelf && options != null)
             {
@@ -295,7 +319,7 @@ namespace RulesShift
             {
                 int idx = Mathf.Clamp((Mathf.Max(p.halves, lastHalves) - 1) / 2, 0, hearts.Length - 1);
                 UiAnim.Punch(hearts[idx].transform, p.halves < lastHalves ? 0.45f : 0.3f, 0.3f);
-                if (p.halves < lastHalves) hurtAlpha = 0.35f;
+                if (p.halves < lastHalves) { hurtAlpha = 0.35f; flashColor = new Color(0.8f, 0.05f, 0.05f); }
             }
             if (p.maxHalves != lastMax)
             {
@@ -306,6 +330,127 @@ namespace RulesShift
             }
             lastHalves = p.halves;
             lastMax = p.maxHalves;
+        }
+
+        // ---------------- the floor map (Tab) ----------------
+
+        /// <summary>The HUD size from the settings (bigger hearts, texts and icons on small screens).</summary>
+        public void ApplyScale()
+        {
+            var scaler = root ? root.GetComponent<UnityEngine.UI.CanvasScaler>() : null;
+            if (scaler) scaler.referenceResolution = new Vector2(1280f, 720f) / Mathf.Clamp(SaveSystem.Data.uiScale, 0.8f, 1.3f);
+        }
+
+        public bool MapOpen => mapPanel && mapPanel.gameObject.activeSelf;
+        /// <summary>The relic choice is on screen (the touch controls step aside).</summary>
+        public bool Choosing => upgradePanel && upgradePanel.activeSelf;
+
+        public void ToggleMap()
+        {
+            if (MapOpen) { Destroy(mapPanel.gameObject); mapPanel = null; return; }
+            BuildMap();
+        }
+
+        void BuildMap()
+        {
+            var rm = RoomManager.I;
+            if (rm == null) return;
+            var rows = rm.MapRows();
+            if (rows.Count == 0) return;
+            float rowH = 54f;
+            float h = 130f + rows.Count * rowH;
+            var panel = UiKit.Panel(root, "Map", new Vector2(0.5f, 0.5f), new Vector2(0f, 10f), new Vector2(760f, h));
+            mapPanel = panel.rectTransform;
+            var cg = mapPanel.gameObject.AddComponent<CanvasGroup>();
+            cg.blocksRaycasts = false;
+            UiKit.Title(mapPanel, Loc.F("map.title", rm.Floor + 1), 16, UiKit.Gold, new Vector2(0f, h / 2f - 44f), new Vector2(680f, 28f));
+            // the boss on top, the start of the floor at the bottom
+            for (int r = 0; r < rows.Count; r++)
+            {
+                var row = rows[r];
+                float y = -h / 2f + 52f + r * rowH;
+                bool past = row.taken != null && !row.here;
+                string label = row.layer == rows.Count - 1 ? Loc.T("map.boss") : Loc.F("map.room", row.layer + 1);
+                UiKit.Text(mapPanel, (row.here ? "> " : "") + label, 20, row.here ? UiKit.Gold : UiKit.Dim, TextAnchor.MiddleLeft,
+                    new Vector2(0.5f, 0.5f), new Vector2(-270f, y), new Vector2(170f, 30f));
+                int n = row.rooms.Length;
+                for (int i = 0; i < n; i++)
+                {
+                    var d = row.rooms[i];
+                    float x = n == 1 ? 90f : -10f + i * 240f;
+                    bool taken = row.taken == d;
+                    var chip = UiKit.Plate(mapPanel, "Room", new Vector2(0.5f, 0.5f), new Vector2(x, y), new Vector2(226f, 44f)).rectTransform;
+                    Color c = d.SignColor;
+                    float a = past && !taken ? 0.35f : 1f;
+                    string title = d.objective == Objective.Boss && !d.floorBoss ? Loc.T("hud.boss") : d.Title;
+                    var t = UiKit.Text(chip, title, 20, new Color(c.r, c.g, c.b, a), TextAnchor.MiddleCenter,
+                        new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(210f, 36f));
+                    if (taken) UiKit.Image(chip, "Taken", Gfx.Dot, UiKit.Gold, new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(10f, 10f));
+                    var img = chip.GetComponent<Image>();
+                    if (img) img.color = new Color(1f, 1f, 1f, past && !taken ? 0.4f : 1f);
+                }
+            }
+            UiKit.Text(mapPanel, Loc.TDevice("map.hint"), 18, UiKit.Dim, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -h / 2f + 18f), new Vector2(700f, 24f));
+            UiAnim.Appear(mapPanel, 0f, new Vector2(0f, -20f), 0.2f);
+        }
+
+        const float BarX = 80f, BarW = 78f;   // the charge bar of the active item plate
+
+        /// <summary>The active item's icon and charge (full = it glows).</summary>
+        GameObject activeKeyGo;
+        string activeKeyShown;
+
+        /// <summary>The key (or gamepad button) over the charge bar: rebuilt when it is rebound or the device changes.</summary>
+        void RefreshActiveKey()
+        {
+            string icon = Binds.Icon("active");
+            string want = (icon ?? "") + "|" + Binds.Name(Binds.Active);
+            if (want == activeKeyShown && activeKeyGo) return;
+            activeKeyShown = want;
+            if (activeKeyGo) Destroy(activeKeyGo);
+            var keyImg = icon != null ? UiKit.KeyIcon(activePlate, icon, Vector2.zero) : null;
+            if (keyImg)
+            {
+                keyImg.rectTransform.anchorMin = keyImg.rectTransform.anchorMax = new Vector2(0f, 0.5f);
+                keyImg.rectTransform.anchoredPosition = new Vector2(BarX + BarW / 2f, 13f);
+                activeKeyGo = keyImg.gameObject;
+            }
+            else activeKeyGo = UiKit.Text(activePlate, Binds.Label("active"), 16, UiKit.Gold, TextAnchor.MiddleCenter, new Vector2(0f, 0.5f),
+                new Vector2(BarX + BarW / 2f, 13f), new Vector2(BarW, 24f), true).gameObject;
+        }
+
+        void UpdateActive(PlayerController p)
+        {
+            RefreshActiveKey();
+            var a = p.Active;
+            if (a == null) { shownActive = ActiveId.None; return; }
+            if (a.id != shownActive)
+            {
+                shownActive = a.id;
+                activeIcon.sprite = GameAssets.I ? GameAssets.I.Any(a.sprite) : null;
+                UiAnim.Pop(activeIcon.transform, 0.3f, 0.35f);
+                shownCharge = -1;
+            }
+            bool ready = p.ActiveReady;
+            if (p.ActiveCharge != shownCharge)
+            {
+                shownCharge = p.ActiveCharge;
+                // the bar is split into one segment per room of charge
+                int n = Mathf.Clamp(a.charge, 1, activePips.Length);
+                float w = (BarW - 3f * (n - 1)) / n;
+                for (int i = 0; i < activePips.Length; i++)
+                {
+                    var pip = activePips[i];
+                    pip.gameObject.SetActive(i < n);
+                    pip.rectTransform.anchoredPosition = new Vector2(BarX + i * (w + 3f) + w / 2f, -15f);
+                    pip.rectTransform.sizeDelta = new Vector2(w, 8f);
+                    pip.color = i < p.ActiveCharge ? a.color : new Color(0.32f, 0.3f, 0.28f, 0.9f);
+                }
+                if (ready) UiAnim.Punch(activePlate, 0.1f, 0.3f);
+            }
+            float pulse = ready ? 0.85f + 0.15f * Mathf.Sin(Time.unscaledTime * 6f) : 0.45f;
+            activeIcon.color = new Color(pulse, pulse, pulse, 1f);
         }
 
         /// <summary>Small icons of the run's relics under the hearts; relics in a combo get a gold dot.</summary>
@@ -322,8 +467,11 @@ namespace RulesShift
             {
                 var def = Relics.Get(list[i]);
                 var sprite = GameAssets.I ? GameAssets.I.Any(def.sprite) : null;
-                float x = 18f + (i % 12) * 34f, y = -16f - (i / 12) * 34f;
-                var img = UiKit.Image(relicRow, def.key, sprite, Color.white, new Vector2(0f, 1f), new Vector2(x, y), new Vector2(30f, 30f));
+                // many relics: smaller icons, more per row
+                int perRow = list.Count > 24 ? 16 : 12;
+                float step = list.Count > 24 ? 26f : 34f;
+                float x = 18f + (i % perRow) * step, y = -16f - (i / perRow) * step;
+                var img = UiKit.Image(relicRow, def.key, sprite, Color.white, new Vector2(0f, 1f), new Vector2(x, y), new Vector2(step - 4f, step - 4f));
                 img.preserveAspect = true;
                 if (inCombo.Contains(def.id))
                     UiKit.Image(img.rectTransform, "Combo", Gfx.Dot, UiKit.Gold, new Vector2(1f, 0f), new Vector2(-2f, 2f), new Vector2(9f, 9f));
@@ -418,6 +566,7 @@ namespace RulesShift
             while (hints.Count > 0)
             {
                 hintText.text = hints.Dequeue();
+                if (Pixie.I) Pixie.I.Ping();
                 hintPanel.gameObject.SetActive(true);
                 Sfx.Play("select", 0.4f, 1.3f);
                 for (float t = 0f; t < 0.25f; t += Time.unscaledDeltaTime)
@@ -448,6 +597,7 @@ namespace RulesShift
         void Build()
         {
             root = UiKit.Canvas(transform, "HUD", 10);
+            ApplyScale();
 
             hurtFlash = UiKit.Image(root, "HurtFlash", Gfx.Vignette, Color.clear, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             UiKit.Stretch(hurtFlash.rectTransform);
@@ -465,6 +615,19 @@ namespace RulesShift
             }
             shieldText = UiKit.Text(leftPlate, Loc.T("hud.shield"), 16, new Color(0.6f, 0.85f, 1f), TextAnchor.MiddleLeft, new Vector2(0f, 1f), new Vector2(200f, -20f), new Vector2(110f, 30f), true);
             shieldText.rectTransform.pivot = new Vector2(0f, 1f);
+
+            // the active item (Q), bottom right: the icon in a dark slot, the key above a charge bar
+            var ap = UiKit.Plate(root, "ActivePlate", new Vector2(1f, 0f), new Vector2(-14f, 14f), new Vector2(176f, 78f));
+            activePlate = ap.rectTransform;
+            activePlate.pivot = new Vector2(1f, 0f);
+            UiKit.Image(activePlate, "Slot", Gfx.White, new Color(0f, 0f, 0f, 0.35f), new Vector2(0f, 0.5f), new Vector2(44f, 0f), new Vector2(48f, 48f));
+            activeIcon = UiKit.Image(activePlate, "Icon", null, Color.white, new Vector2(0f, 0.5f), new Vector2(44f, 0f), new Vector2(40f, 40f));
+            activeIcon.preserveAspect = true;
+            UiKit.Image(activePlate, "BarBack", Gfx.White, new Color(0f, 0f, 0f, 0.45f), new Vector2(0f, 0.5f), new Vector2(BarX + BarW / 2f, -15f), new Vector2(BarW + 4f, 14f));
+            activePips = new Image[4];
+            for (int i = 0; i < activePips.Length; i++)
+                activePips[i] = UiKit.Image(activePlate, "Pip" + i, Gfx.White, UiKit.Dim, new Vector2(0f, 0.5f), new Vector2(BarX, -15f), new Vector2(10f, 10f));
+            RefreshActiveKey();
 
             // relics under the hearts
             relicRow = UiKit.Rect(root, "Relics", new Vector2(0f, 1f), new Vector2(14f, -80f), new Vector2(420f, 70f));
@@ -580,7 +743,7 @@ namespace RulesShift
             // reward choice
             upgradePanel = UiKit.Screen(root, "Upgrades", 0.6f);
             UiKit.Title(upgradePanel.transform, Loc.T("hud.pick"), 32, UiKit.Gold, new Vector2(0f, 236f), new Vector2(900f, 52f));
-            UiKit.Label(upgradePanel.transform, Loc.T("hud.pickHint"), 26, UiKit.Dim, new Vector2(0f, -236f), new Vector2(900f, 30f));
+            pickHint = UiKit.Label(upgradePanel.transform, Loc.TDevice("hud.pickHint"), 26, UiKit.Dim, new Vector2(0f, -236f), new Vector2(900f, 30f));
             upgradePanel.SetActive(false);
             hintPanel.SetSiblingIndex(upgradePanel.transform.GetSiblingIndex());   // hints stay readable over the reward choice
 
@@ -588,7 +751,38 @@ namespace RulesShift
             fade = UiKit.Image(root, "Fade", Gfx.White, Color.black, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             UiKit.Stretch(fade.rectTransform);
             fade.gameObject.SetActive(true);
+            FitSafeArea();
         }
+
+        RectTransform safeArea;
+        Rect lastSafe;
+
+        /// <summary>
+        /// Phones with a notch or rounded corners: the corner plates move inside Screen.safeArea
+        /// (full-screen layers — the hurt flash, the reward choice, the fade — still cover everything).
+        /// </summary>
+        void FitSafeArea()
+        {
+            if (!safeArea)
+            {
+                safeArea = UiKit.Rect(root, "SafeArea", new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+                safeArea.SetSiblingIndex(1);   // right above the hurt flash
+                foreach (var n in new[] { "LeftPlate", "Relics", "RightPlate", "ActivePlate" })
+                {
+                    var t = root.Find(n);
+                    if (t) t.SetParent(safeArea, false);
+                }
+                if (objective) objective.transform.SetParent(safeArea, false);
+            }
+            Rect sa = Screen.safeArea;
+            lastSafe = sa;
+            if (Screen.width <= 0 || Screen.height <= 0) return;
+            safeArea.anchorMin = new Vector2(sa.xMin / Screen.width, sa.yMin / Screen.height);
+            safeArea.anchorMax = new Vector2(sa.xMax / Screen.width, sa.yMax / Screen.height);
+            safeArea.offsetMin = safeArea.offsetMax = Vector2.zero;
+        }
+
+        Text pickHint;
 
         void BuildUpgradeCards()
         {
@@ -608,14 +802,15 @@ namespace RulesShift
                 if (first == null) first = btn;
                 var rt = (RectTransform)btn.transform;
 
-                UiKit.Title(rt, Loc.T(u.IsRelic ? "hud.relic" : "hud.flask"), 16, u.IsRelic ? u.relic.color : UiKit.Dim, new Vector2(0f, 160f), new Vector2(270f, 26f));
-                var sprite = GameAssets.I ? GameAssets.I.Any(u.sprite) : null;
+                Color kindColor = u.IsRelic ? u.relic.color : u.IsActive ? u.active.color : UiKit.Dim;
+                UiKit.Title(rt, Loc.T(u.IsRelic ? "hud.relic" : u.IsActive ? "hud.active" : "hud.flask"), 16, kindColor, new Vector2(0f, 160f), new Vector2(270f, 26f));
+                var sprite = GameAssets.I ? GameAssets.I.Any(u.SpriteName) : null;   // unknown flasks keep this run's look
                 float scale = 6f;
                 if (sprite) scale = Mathf.Min(6f, 108f / Mathf.Max(sprite.rect.width, sprite.rect.height));
                 var icon = UiKit.Icon(rt, sprite, new Vector2(0f, 74f), Mathf.Max(2f, Mathf.Floor(scale)));
                 UiBob.Add(icon, 6f, 3f);
 
-                UiKit.Title(rt, u.title, 16, u.IsRelic ? u.relic.color : UiKit.Gold, new Vector2(0f, -14f), new Vector2(280f, 44f));
+                UiKit.Title(rt, u.title, 16, u.IsRelic || u.IsActive ? kindColor : UiKit.Gold, new Vector2(0f, -14f), new Vector2(280f, 44f));
                 UiKit.Paragraph(rt, u.desc, 28, UiKit.Cream, new Vector2(0f, -78f), new Vector2(270f, 80f));
 
                 var partner = u.IsRelic && p != null ? Relics.Partner(u.relic.id, p.RelicSet) : null;
@@ -623,6 +818,17 @@ namespace RulesShift
                 {
                     var tag = UiKit.Title(rt, Loc.F("hud.comboWith", partner.Name), 16, UiKit.Gold, new Vector2(0f, -136f), new Vector2(280f, 26f));
                     UiAnim.Pop(tag.transform, 0.6f, 0.3f, 0.3f + 0.06f * i);
+                }
+                else if (u.IsRelic)
+                {
+                    // a combo you already found in another run: remind which relic it needs
+                    foreach (var c in Relics.Combos)
+                    {
+                        if ((c.a != u.relic.id && c.b != u.relic.id) || !SaveSystem.KnowsCombo(c.key)) continue;
+                        var other = Relics.Get(c.a == u.relic.id ? c.b : c.a);
+                        UiKit.Title(rt, Loc.F("hud.comboKnown", other.Name), 16, UiKit.Dim, new Vector2(0f, -136f), new Vector2(280f, 26f));
+                        break;
+                    }
                 }
                 if (!UiKit.KeyIcon(rt, (i + 1).ToString(), new Vector2(0f, -166f)))
                     UiKit.Title(rt, (i + 1).ToString(), 16, UiKit.Dim, new Vector2(0f, -168f), new Vector2(60f, 24f));

@@ -25,6 +25,21 @@ namespace RulesShift
             t.Init(text, color, size, life);
         }
 
+        /// <summary>A small icon that floats up and fades (a relic just worked).</summary>
+        public static void Icon(Sprite s, Vector2 pos, float life = 0.7f, float scale = 0.8f)
+        {
+            if (!s) return;
+            var go = new GameObject("Icon");
+            if (Root) go.transform.SetParent(Root, false);
+            go.transform.position = pos;
+            go.transform.localScale = Vector3.one * scale;
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = s;
+            sr.sortingOrder = 41;
+            if (Unlit) sr.sharedMaterial = Unlit;
+            go.AddComponent<FxFloat>().Init(sr, life);
+        }
+
         public static Material Unlit => GameAssets.I ? GameAssets.I.unlitSprite : null;
 
         /// <summary>
@@ -48,6 +63,24 @@ namespace RulesShift
             if (Unlit) sr.sharedMaterial = Unlit;
             go.AddComponent<FxAnim>().Init(sr, frames, false);
             return true;
+        }
+
+        /// <summary>Plays any frame set once (a monster's death, a boss's swing) and removes itself. Lit like the room.</summary>
+        public static GameObject Frames(Sprite[] frames, Vector2 pos, float fps, bool flipX = false, int order = 0, float scale = 1f)
+        {
+            if (frames == null || frames.Length == 0) return null;
+            var go = new GameObject("Fx_frames");
+            if (Root) go.transform.SetParent(Root, false);
+            go.transform.position = pos;
+            go.transform.localScale = new Vector3(scale, scale, 1f);
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = frames[0];
+            sr.flipX = flipX;
+            sr.sortingOrder = order;
+            sr.spriteSortPoint = SpriteSortPoint.Pivot;
+            Gfx.Lit(sr);
+            go.AddComponent<FxAnim>().Init(sr, frames, false, fps);
+            return go;
         }
 
         /// <summary>A looping effect (fire on a burning enemy). Destroy the returned object to stop it.</summary>
@@ -76,16 +109,19 @@ namespace RulesShift
         bool loop;
         float t;
 
-        public void Init(SpriteRenderer r, Sprite[] f, bool looping)
+        float fps = 15f;
+
+        public void Init(SpriteRenderer r, Sprite[] f, bool looping, float framesPerSecond = 15f)
         {
             sr = r;
             frames = f;
             loop = looping;
+            fps = framesPerSecond;
         }
 
         void Update()
         {
-            t += Time.deltaTime * 15f;
+            t += Time.deltaTime * fps;
             int i = (int)t;
             if (i >= frames.Length)
             {
@@ -97,11 +133,54 @@ namespace RulesShift
         }
     }
 
+    /// <summary>
+    /// A burst of square pixels. The pixels come from a shared pool (bursts are everywhere: hits, trails, relics),
+    /// so a busy fight doesn't create and destroy hundreds of objects every second.
+    /// </summary>
     public class FxBurst : MonoBehaviour
     {
+        static readonly System.Collections.Generic.Stack<SpriteRenderer> pool = new System.Collections.Generic.Stack<SpriteRenderer>();
+        static Transform poolRoot;
+
         SpriteRenderer[] parts;
         Vector2[] vel;
         float life, t;
+
+        static SpriteRenderer Take(Transform parent)
+        {
+            while (pool.Count > 0)
+            {
+                var sr = pool.Pop();
+                if (!sr) continue;   // destroyed together with an old room
+                sr.transform.SetParent(parent, false);
+                sr.transform.localPosition = Vector3.zero;
+                sr.gameObject.SetActive(true);
+                return sr;
+            }
+            var go = new GameObject("p");
+            go.transform.SetParent(parent, false);
+            var r = go.AddComponent<SpriteRenderer>();
+            r.sprite = Gfx.White;
+            r.sortingOrder = 30;
+            return r;
+        }
+
+        void Give()
+        {
+            if (!poolRoot)
+            {
+                poolRoot = new GameObject("FxPool").transform;
+                poolRoot.gameObject.SetActive(false);
+            }
+            foreach (var p in parts)
+            {
+                if (!p) continue;
+                p.transform.SetParent(poolRoot, false);
+                if (pool.Count < 600) pool.Push(p);
+                else Destroy(p.gameObject);
+            }
+            parts = null;
+        }
 
         public void Init(Color color, int count, float speed, float lifeTime, float size)
         {
@@ -111,13 +190,9 @@ namespace RulesShift
             var mat = Fx.Unlit;
             for (int i = 0; i < count; i++)
             {
-                var go = new GameObject("p");
-                go.transform.SetParent(transform, false);
-                go.transform.localScale = Vector3.one * size * Random.Range(0.7f, 1.3f);
-                var sr = go.AddComponent<SpriteRenderer>();
-                sr.sprite = Gfx.White;
+                var sr = Take(transform);
+                sr.transform.localScale = Vector3.one * size * Random.Range(0.7f, 1.3f);
                 sr.color = color;
-                sr.sortingOrder = 30;
                 if (mat) sr.sharedMaterial = mat;
                 parts[i] = sr;
                 vel[i] = Random.insideUnitCircle.normalized * speed * Random.Range(0.4f, 1f) + Vector2.up * 1.5f;
@@ -128,14 +203,34 @@ namespace RulesShift
         {
             t += Time.deltaTime;
             float k = 1f - t / life;
-            if (k <= 0f) { Destroy(gameObject); return; }
+            if (k <= 0f) { Give(); Destroy(gameObject); return; }
             for (int i = 0; i < parts.Length; i++)
             {
+                if (!parts[i]) continue;
                 vel[i] *= 1f - Time.deltaTime * 4f;
                 vel[i].y -= Time.deltaTime * 6f;
                 parts[i].transform.localPosition += (Vector3)(vel[i] * Time.deltaTime);
                 var c = parts[i].color; c.a = k; parts[i].color = c;
             }
+        }
+    }
+
+    /// <summary>Floats up and fades out (Fx.Icon).</summary>
+    public class FxFloat : MonoBehaviour
+    {
+        SpriteRenderer sr;
+        float life, t;
+
+        public void Init(SpriteRenderer r, float lifeTime) { sr = r; life = lifeTime; }
+
+        void Update()
+        {
+            t += Time.unscaledDeltaTime;
+            if (t >= life) { Destroy(gameObject); return; }
+            transform.position += Vector3.up * Time.unscaledDeltaTime * 1.4f;
+            float k = t / life;
+            transform.localScale = Vector3.one * (0.8f + 0.25f * Mathf.Sin(Mathf.Min(1f, k * 3f) * Mathf.PI));
+            var c = sr.color; c.a = Mathf.Clamp01((1f - k) * 2.5f); sr.color = c;
         }
     }
 
