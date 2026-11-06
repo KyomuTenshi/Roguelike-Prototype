@@ -17,13 +17,16 @@
         <div id="unity-percent">0%</div>
       </div>
 
-      <button id="unity-fullscreen" title="Fullscreen" aria-label="Fullscreen">
-        <svg viewBox="0 0 16 16" width="20" height="20" shape-rendering="crispEdges">
-          <path d="M1 1h5v2H3v3H1zM10 1h5v5h-2V3h-3zM1 10h2v3h3v2H1zM13 10h2v5h-5v-2h3z" fill="currentColor"/>
-        </svg>
-      </button>
-
       <div id="unity-warning"></div>
+
+      <!-- phones held upright: the game is played sideways -->
+      <div id="unity-rotate">
+        <svg viewBox="0 0 32 32" width="72" height="72" shape-rendering="crispEdges">
+          <path d="M11 4h10v2H11zM9 6h2v20H9zM21 6h2v20h-2zM11 26h10v2H11zM15 23h2v2h-2z" fill="currentColor"/>
+          <path d="M25 9h2v2h2v2h-2v2h-2zM27 13h2v6h-2z" fill="currentColor" opacity="0.6"/>
+        </svg>
+        <div id="unity-rotate-text">Rotate your phone</div>
+      </div>
     </div>
 
     <script>
@@ -32,8 +35,16 @@
       var loading = document.querySelector("#unity-loading");
       var fill = document.querySelector("#unity-progress-fill");
       var percent = document.querySelector("#unity-percent");
-      var fullscreenButton = document.querySelector("#unity-fullscreen");
       var warning = document.querySelector("#unity-warning");
+
+      // the "turn your phone" note in the player's language
+      var rotateTexts = { ru: "Поверни телефон горизонтально", zh: "请横屏游玩", es: "Gira el teléfono en horizontal" };
+      var lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+      document.querySelector("#unity-rotate-text").textContent = rotateTexts[lang] || "Turn your phone sideways";
+
+      // no long-press menu, no text selection over the game
+      canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
 
       // Errors and warnings from the engine, shown over the game for a few seconds.
       function unityShowBanner(msg, type) {
@@ -75,12 +86,15 @@
       function focusGame() { canvas.focus(); }
       canvas.addEventListener("pointerdown", focusGame);
 
-      function updateFullscreenButton() {
+      // Fullscreen comes from the game's settings (desktop) or the itch.io frame's own button.
+      // Chrome and Edge: Esc stays with the game (pause) instead of leaving fullscreen; hold Esc to leave.
+      // Other browsers leave fullscreen on Esc: the game pauses then and "Continue" brings fullscreen back.
+      function onFullscreenChange() {
         var full = document.fullscreenElement || document.webkitFullscreenElement;
-        fullscreenButton.style.display = full ? "none" : "";
+        if (full && navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(["Escape"]).catch(function () {});
       }
-      document.addEventListener("fullscreenchange", updateFullscreenButton);
-      document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+      document.addEventListener("fullscreenchange", onFullscreenChange);
+      document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
       var script = document.createElement("script");
       script.src = loaderUrl;
@@ -92,7 +106,8 @@
         }).then(function (unityInstance) {
           loading.classList.add("hidden");
           setTimeout(function () { loading.style.display = "none"; }, 600);
-          fullscreenButton.onclick = function () {
+          // called by the game's "Fullscreen" setting (Plugins/WebGL/RulecrawlWeb.jslib)
+          window.rulecrawlFullscreen = function () {
             unityInstance.SetFullscreen(1);
             focusGame();
           };
