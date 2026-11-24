@@ -125,6 +125,7 @@ namespace RulesShift
             { "victory", T(6, 8.501f, 32.0f) },                 // Victory!
             { "defeat", T(1) },                                 // Falling Apart (Prologue)
             { "prologue", T(1) },                               // the night the console turned on
+            { "teaser", N("28. Holy Sanctuary", -18f) },      // after the true ending: the next game (slow, minor, soft)
         };
 
         public static Track Get(string key) => key != null && map.TryGetValue(key, out var t) ? t : null;

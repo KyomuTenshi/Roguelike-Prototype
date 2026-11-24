@@ -23,6 +23,14 @@ namespace RulesShift
             if (b != null && !Rules.ShotsHeal) b.Hit(99999f, Vector2.up);
         }
 
+        /// <summary>The next white feather lies in this room (even if one was already found this run).</summary>
+        public void DebugFeather()
+        {
+            if (!DebugReady) return;
+            featherThisRun = false;
+            SpawnFeather();
+        }
+
         /// <summary>The room counts as cleared: doors open (no chest).</summary>
         public void DebugClear()
         {

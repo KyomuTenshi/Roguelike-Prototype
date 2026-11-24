@@ -222,6 +222,15 @@ namespace RulesShift
                 if (GUILayout.Button($"{Loc.T("npc." + id + ".name")} ({met})", small, GUILayout.Width(80))) rm.DebugNpc(id);
             }
             GUILayout.EndHorizontal();
+            GUILayout.Label("Белые перья (тизер следующей игры): найдено " + RoomManager.FeathersFound + "/" + RoomManager.FeatherCount);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Положить следующее перо")) { open = false; rm.DebugFeather(); }
+            if (GUILayout.Button("Сбросить перья"))
+            {
+                SaveSystem.Data.feathers = 0;
+                SaveSystem.Save();
+            }
+            GUILayout.EndHorizontal();
             if (GUILayout.Button("Сбросить встречи с NPC (история с начала)"))
             {
                 SaveSystem.Data.npcMeets.Clear();
@@ -230,13 +239,14 @@ namespace RulesShift
 
             GUILayout.Space(6);
             GUILayout.Label("Кодекс (меняет сохранение):");
-            if (GUILayout.Button("Открыть в кодексе пролог, все сохранения и концовки"))
+            if (GUILayout.Button("Открыть в кодексе пролог, все сохранения, концовки и тизер"))
             {
                 var d = SaveSystem.Data;
                 d.prologueSeen = true;
                 d.saveFound = true;
                 d.saveFiles = (1 << RoomManager.MemoryCount) - 1;
                 d.finales = (1 << RoomManager.EndingCount) - 1;
+                d.teaserSeen = true;
                 SaveSystem.Save();
             }
         }

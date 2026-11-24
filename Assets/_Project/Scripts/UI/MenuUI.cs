@@ -312,6 +312,13 @@ namespace RulesShift
             var boss = AnimatedSprite(tr, "big_demon_idle_anim", new Vector2(470f, -300f), 5f, 7f);
             if (boss) boss.rectTransform.localScale = new Vector3(-1f, 1f, 1f);
 
+            // the next game, once the teaser after the true ending was seen
+            if (d.teaserSeen)
+            {
+                var next = UiKit.Label(tr, Loc.T("menu.next"), 18, UiKit.Dim, new Vector2(0f, -326f), new Vector2(760f, 24f));
+                UiAnim.Appear(next.rectTransform, 0.9f, new Vector2(0f, -10f), 0.3f);
+            }
+
             UiKit.Select(list[0]);
         }
 
@@ -500,7 +507,10 @@ namespace RulesShift
             for (int i = 0; i < RoomManager.MemoryCount; i++) if ((d.saveFiles & (1 << i)) != 0) mems++;
             for (int i = 0; i < RoomManager.EndingCount; i++) if ((d.finales & (1 << i)) != 0) ends++;
 
-            UiKit.Label(board, Loc.F("codex.saveFiles", mems, RoomManager.MemoryCount), 26, UiKit.Dim, new Vector2(0f, 190f), new Vector2(600f, 30f));
+            // the white feathers stay a secret until the first one is found
+            string found = Loc.F("codex.saveFiles", mems, RoomManager.MemoryCount);
+            if (RoomManager.FeathersFound > 0) found += Loc.Dot + Loc.F("codex.feathers", RoomManager.FeathersFound, RoomManager.FeatherCount);
+            UiKit.Label(board, found, 26, UiKit.Dim, new Vector2(0f, 190f), new Vector2(600f, 30f));
             if (d.prologueSeen)
                 UiKit.Button(board, Loc.T("codex.prologue"), new Vector2(440f, 190f), new Vector2(230f, 44f), () =>
                 {
@@ -518,6 +528,11 @@ namespace RulesShift
             }
 
             UiKit.Label(board, Loc.F("codex.finales", ends, RoomManager.EndingCount), 26, UiKit.Dim, new Vector2(0f, 26f), new Vector2(600f, 30f));
+            if (d.teaserSeen)
+                UiKit.Button(board, Loc.T("codex.teaser"), new Vector2(440f, 26f), new Vector2(230f, 44f), () =>
+                {
+                    if (RoomManager.I) RoomManager.I.PreviewTeaser();
+                });
             for (int i = 0; i < RoomManager.EndingCount; i++)
             {
                 int which = i;

@@ -22,6 +22,8 @@ namespace RulesShift
         public int finales;                         // bit per ending seen
         public bool prologueSeen;                   // the night the console turned on
         public bool pixieMet;                       // Pixie introduced herself
+        public bool teaserSeen;                     // the scene after the true ending (the next game)
+        public int feathers;                        // bit per white feather found (the next game's world)
         public List<int> laws = new List<int>();   // discovered Law values (codex)
 
         // Records

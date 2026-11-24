@@ -659,6 +659,12 @@ namespace RulesShift
             yield return Cutscene.UI.Card(Loc.T("ending.label"), Loc.T("ending." + which + ".name"), 3f);
             // the screen stays black: whoever called this opens the next screen and then lifts the dark slowly
             Cutscene.End(false);
+
+            if (which == 2)
+            {
+                yield return CrownTeaser(true);
+                if (MusicPlayer.I) MusicPlayer.I.Play("secret");   // the results play under the ending's own music
+            }
         }
 
         /// <summary>Lifts the black left by an ending, under the menu that just opened.</summary>

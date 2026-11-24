@@ -259,6 +259,7 @@ namespace RulesShift
             escapeeFloor = -1;
             planFloor = -1;
             npcsMet.Clear();
+            featherThisRun = false;
             memoryThisRun = false;
             completedMemories = false;
             ending = -1;
@@ -914,6 +915,7 @@ namespace RulesShift
                 player.OnRoomClear(coins);
                 player.ChargeActive();
                 Pickup.MagnetAll();
+                TrySpawnFeather();
                 if (player.Hero.cleanRoomHeal && !player.HurtThisRoom && player.halves < player.maxHalves && def.law != Law.None)
                 {
                     player.Heal(1);
