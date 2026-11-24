@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace RulesShift
 {
@@ -17,10 +18,19 @@ namespace RulesShift
         public bool spectral;              // flies through walls (Ghost relic)
     }
 
-    /// <summary>Arrow, orb or soul. Moves itself and checks overlaps every frame (no physics bodies needed).</summary>
+    /// <summary>
+    /// Arrow, orb or soul. Moves itself and checks overlaps every frame (no physics bodies needed).
+    /// Shots are pooled: a finished shot is switched off and waits for the next one instead of being destroyed
+    /// (a busy fight fires dozens a second). Only a few shots at a time carry a light: every 2D light is a draw pass.
+    /// </summary>
     public class Projectile : MonoBehaviour
     {
         static readonly List<Projectile> all = new List<Projectile>();
+        static readonly Stack<Projectile> pool = new Stack<Projectile>();
+        static Transform poolRoot;
+        const int PoolMax = 160;
+        static int MaxLit => Perf.LowEnd ? 8 : 14;   // lit shots at once (phones get fewer)
+        static int litCount;
         static readonly List<Collider2D> results = new List<Collider2D>();
         static readonly RaycastHit2D[] rayHits = new RaycastHit2D[8];
         static ContactFilter2D filter, solidFilter;
@@ -39,6 +49,13 @@ namespace RulesShift
         Color sparkColor;
         bool spin, turnVisual;
         Transform visual;
+
+        // pooling
+        bool live, started, lit;
+        int gen;                   // grows on every reuse: code still busy with the old shot sees the change
+        SpriteRenderer vis;        // the one visual child, reused
+        SpriteAnimator visAnim;    // the Retro fireball's frames
+        Light2D glow;
 
         /// <summary>The hero's shot: arrow, throwing axe, knife or magic orb (see HeroDef).</summary>
         public static Projectile Hero(Vector2 pos, Vector2 dir, HeroDef hero, float speed, float damage, int pierce, ShotMods mods = default, float size = 1f)
@@ -81,7 +98,7 @@ namespace RulesShift
             else if (mods.poison > 0) vis.color = new Color(0.7f, 1f, 0.55f);
 
             if (Rules.EnemyLights || hero.projGlow)
-                LightUtil.Point(p.transform, Vector3.zero, hero.projGlow ? hero.projColor : new Color(0.4f, 1f, 1f), 1.4f, 1.2f);
+                p.Glow(hero.projGlow ? hero.projColor : new Color(0.4f, 1f, 1f), 1.4f, 1.2f);
             return p;
         }
 
@@ -108,27 +125,29 @@ namespace RulesShift
             {
                 // the Retro law: a Game Boy fireball instead of a glowing orb
                 sr = p.Visual(retro[0], Color.white, false);
-                var anim = sr.gameObject.AddComponent<SpriteAnimator>();
-                anim.target = sr;
-                anim.Play(retro, 12f);
+                if (!p.visAnim) p.visAnim = sr.gameObject.AddComponent<SpriteAnimator>();
+                p.visAnim.enabled = true;
+                p.visAnim.target = sr;
+                p.visAnim.Play(retro, 12f, true);
             }
             else sr = p.Visual(Gfx.Orb, color, false);
             sr.transform.localScale = Vector3.one * size;
             if (Fx.Unlit) sr.sharedMaterial = Fx.Unlit;   // visible in the dark
             p.sparkColor = color;
             if (Rules.EnemyLights || Rules.Current == Law.Crypt)
-                LightUtil.Point(p.transform, Vector3.zero, color, Rules.EnemyLights ? 1.6f : 1f, 1.3f);
+                p.Glow(color, Rules.EnemyLights ? 1.6f : 1f, 1.3f);
             return p;
         }
 
         static Projectile Create(string name, Vector2 pos, Vector2 dir, float speed, float damage, Team team, float radius, float life)
         {
-            var go = new GameObject(name);
-            if (Fx.Root) go.transform.SetParent(Fx.Root, false);
+            var p = Take(name);
+            var go = p.gameObject;
+            go.transform.SetParent(Fx.Root, false);
             go.transform.position = pos;
             float ang = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
             go.transform.rotation = Quaternion.Euler(0f, 0f, ang);
-            var p = go.AddComponent<Projectile>();
+            go.transform.localScale = Vector3.one;
             p.team = team;
             p.velocity = dir.normalized * speed;
             p.origin = pos;
@@ -142,9 +161,18 @@ namespace RulesShift
         /// <summary>Child renderer centred on the projectile. pointsUp: sprite drawn pointing up (0x72 weapons).</summary>
         SpriteRenderer Visual(Sprite s, Color c, bool pointsUp)
         {
-            var go = new GameObject("Visual");
-            go.transform.SetParent(transform, false);
-            var sr = go.AddComponent<SpriteRenderer>();
+            if (!vis)
+            {
+                var v = new GameObject("Visual");
+                v.transform.SetParent(transform, false);
+                vis = v.AddComponent<SpriteRenderer>();
+            }
+            var go = vis.gameObject;
+            var sr = vis;
+            go.SetActive(true);
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localScale = Vector3.one;
             sr.sprite = s;
             sr.color = c;
             sr.sortingOrder = 20;
@@ -163,11 +191,96 @@ namespace RulesShift
             return sr;
         }
 
-        void OnDestroy() => all.Remove(this);
+        // ---------------- the pool ----------------
+
+        static Projectile Take(string name)
+        {
+            Projectile p = null;
+            while (pool.Count > 0 && p == null)
+            {
+                p = pool.Pop();
+                if (!p) p = null;   // went down with an old scene
+            }
+            if (p == null) p = new GameObject(name).AddComponent<Projectile>();
+            else
+            {
+                p.gameObject.name = name;
+                p.gameObject.SetActive(true);
+            }
+            p.ResetShot();
+            all.Add(p);
+            return p;
+        }
+
+        /// <summary>Clean state for a new shot (fields keep their old values in a pooled object).</summary>
+        void ResetShot()
+        {
+            gen++;
+            live = true;
+            started = false;
+            velocity = origin = Vector2.zero;
+            wallBounces = 0;
+            damage = 0f;
+            pierce = 0;
+            radius = 0f;
+            life = 0f;
+            wakes = shard = crit = soul = false;
+            mods = default;
+            alreadyHit.Clear();
+            sparkColor = Color.white;
+            spin = turnVisual = false;
+            visual = null;
+            if (vis) vis.gameObject.SetActive(false);
+            if (visAnim) { visAnim.enabled = false; visAnim.frames = null; }
+            SetLit(false);
+        }
+
+        /// <summary>The shot is over: back to the pool (or destroyed when the pool is full).</summary>
+        void Release()
+        {
+            if (!live) return;   // already over (a hit can end the shot twice in one chain of events)
+            live = false;
+            all.Remove(this);
+            SetLit(false);
+            if (pool.Count >= PoolMax) { Destroy(gameObject); return; }
+            if (!poolRoot)
+            {
+                poolRoot = new GameObject("ProjectilePool").transform;
+                poolRoot.gameObject.SetActive(false);
+            }
+            transform.SetParent(poolRoot, false);
+            pool.Push(this);
+        }
+
+        /// <summary>A light on this shot, if the budget allows.</summary>
+        void Glow(Color color, float radius, float intensity)
+        {
+            if (!lit && litCount >= MaxLit) return;
+            if (!glow) glow = LightUtil.Point(transform, Vector3.zero, color, radius, intensity);
+            if (!glow) return;
+            glow.color = color;
+            glow.pointLightOuterRadius = radius;
+            glow.pointLightInnerRadius = radius * 0.3f;
+            glow.intensity = intensity;
+            SetLit(true);
+        }
+
+        void SetLit(bool on)
+        {
+            if (on != lit) litCount += on ? 1 : -1;
+            lit = on;
+            if (glow) glow.enabled = on;
+        }
+
+        void OnDestroy()
+        {
+            all.Remove(this);
+            if (lit) litCount--;
+            lit = false;
+        }
 
         void Awake()
         {
-            all.Add(this);
             if (!filterReady)
             {
                 filter = ContactFilter2D.noFilter;
@@ -178,14 +291,18 @@ namespace RulesShift
             }
         }
 
-        void Start()
+        /// <summary>Runs on the first frame of every shot (Start runs only once for a pooled object).</summary>
+        void FirstFrame()
         {
+            started = true;
             if (team == Team.Player && wakes && !soul) Enemy.WakeNear(transform.position, 4.5f);
             turnVisual = mods.homing > 0f || mods.bounces > 0;
         }
 
         void Update()
         {
+            if (!live) return;
+            if (!started) FirstFrame();
             float dt = Time.deltaTime;
             if (team == Team.Enemy) dt *= Rules.WorldTime;   // the Time law: enemy shots hang in the air
             if (dt <= 0f) return;
@@ -194,7 +311,7 @@ namespace RulesShift
             if (life <= 0f)
             {
                 if (soul && mods.blast > 0f) Explode(transform.position);
-                Destroy(gameObject);
+                Release();
                 return;
             }
 
@@ -215,7 +332,7 @@ namespace RulesShift
                 prev = p;
             }
             var room = RoomManager.I ? RoomManager.I.CurrentRoom : null;
-            if (room && !room.Contains(transform.position, 2f)) Destroy(gameObject);
+            if (room && !room.Contains(transform.position, 2f)) Release();
         }
 
         void Steer(float dt)
@@ -240,6 +357,7 @@ namespace RulesShift
 
         bool Check(Vector2 p, Vector2 prev)
         {
+            int g = gen;
             results.Clear();
             Physics2D.OverlapCircle(p, radius, filter, results);
             // targets first: a crate or a lever stands on a solid cell, the shot must hit it before the cell stops it
@@ -252,6 +370,7 @@ namespace RulesShift
                 if (target == null || !target.Alive || target.Team == team || alreadyHit.Contains(target)) continue;
                 alreadyHit.Add(target);
                 HitTarget(target);
+                if (gen != g || !live) return true;   // the hit ended this shot (a cutscene cleared the shots)
                 if (pierce-- <= 0) { Impact(p); return true; }
             }
             if (mods.spectral && team == Team.Player) return false;
@@ -288,7 +407,10 @@ namespace RulesShift
             }
             var hero = team == Team.Player && !Rules.ShotsHeal ? PlayerController.I : null;
             float dmg = hero ? hero.PreHit(target, damage, origin) : damage;
-            target.Hit(dmg, velocity.normalized);
+            int g = gen;
+            Vector2 dir = velocity.normalized;
+            target.Hit(dmg, dir);
+            if (gen != g) return;   // the hit ended this shot and the pool already gave it to another one
             if (team != Team.Player || Rules.ShotsHeal) return;
             if (hero) hero.PostHit(target, dmg, velocity.normalized);
 
@@ -303,7 +425,7 @@ namespace RulesShift
         /// <summary>Every shot in flight disappears (cutscenes).</summary>
         public static void ClearAll()
         {
-            foreach (var p in all.ToArray()) if (p) Destroy(p.gameObject);
+            foreach (var p in all.ToArray()) if (p) p.Release();
             all.Clear();
         }
 
@@ -356,7 +478,7 @@ namespace RulesShift
             {
                 if (!p || p.team != Team.Enemy || Vector2.Distance(p.transform.position, center) > range) continue;
                 Fx.Burst(p.transform.position, new Color(0.8f, 0.6f, 1f), 4, 2f, 0.25f, 1f);
-                Destroy(p.gameObject);
+                p.Release();
             }
         }
 
@@ -396,8 +518,7 @@ namespace RulesShift
                 p.turnVisual = true;
                 p.alreadyHit.Clear();
                 p.sparkColor = new Color(1f, 0.9f, 0.5f);
-                var sr = p.GetComponentInChildren<SpriteRenderer>();
-                if (sr) sr.color = new Color(1f, 0.9f, 0.45f);
+                if (p.vis) p.vis.color = new Color(1f, 0.9f, 0.45f);
                 if (!Fx.Anim("reflect", p.transform.position, 0.5f))
                     Fx.Burst(p.transform.position, new Color(1f, 0.95f, 0.6f), 6, 3f, 0.25f, 1.2f);
                 n++;
@@ -429,7 +550,7 @@ namespace RulesShift
             if (team == Team.Player && RoomManager.I) RoomManager.I.OnWallHit(p);
             if (team == Team.Player && mods.blast > 0f && !Rules.ShotsHeal) Explode(p);
             if (team == Team.Player && wakes && !soul) Enemy.WakeNear(p, 3.5f);
-            Destroy(gameObject);
+            Release();
         }
 
         void Explode(Vector2 p) => Explosion(p, mods.blast, Mathf.Max(0.5f, damage * 0.6f), mods.napalm);

@@ -41,6 +41,8 @@ namespace RulesShift
         {
             I = this;
             if (!cam) cam = Camera.main;
+            // phones: no HDR buffer (half the memory traffic of every full-screen pass; bloom still glows)
+            if (cam && Perf.LowEnd) cam.allowHDR = false;
             BuildInvertOverlay();
         }
 
@@ -297,6 +299,16 @@ namespace RulesShift
                     ca.colorFilter.value = new Color(0.85f, 1.08f, 0.88f); ca.contrast.value = 12f;
                     bl.intensity.value = 0.9f; bl.tint.value = new Color(0.6f, 1f, 0.7f); vg.intensity.value = 0.3f;
                     break;
+            }
+            if (Perf.LowEnd)
+            {
+                // phones: the glow is blurred at a quarter of the screen and in fewer steps (looks the same, costs far less)
+                bl.downscale.overrideState = true;
+                bl.downscale.value = BloomDownscaleMode.Quarter;
+                bl.maxIterations.overrideState = true;
+                bl.maxIterations.value = 4;
+                bl.highQualityFiltering.overrideState = true;
+                bl.highQualityFiltering.value = false;
             }
             return p;
         }

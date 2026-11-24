@@ -50,18 +50,19 @@ namespace RulesShift
         {
             var frames = GameAssets.I ? GameAssets.I.Effect(key) : null;
             if (frames == null || frames.Length == 0) return false;
-            var go = new GameObject("Fx_" + key);
-            if (follow) go.transform.SetParent(follow, false);
-            else if (Root) go.transform.SetParent(Root, false);
+            // one-shot effects (every hit spark, every explosion) come from a pool
+            var fx = FxAnim.Take(follow ? follow : Root);
+            var go = fx.gameObject;
             go.transform.position = pos;
             go.transform.rotation = Quaternion.Euler(0f, 0f, angle);
             go.transform.localScale = Vector3.one * scale;
-            var sr = go.AddComponent<SpriteRenderer>();
+            var sr = fx.Renderer;
             sr.sprite = frames[0];
             sr.sortingOrder = order;
-            if (tint.HasValue) sr.color = tint.Value;
+            sr.color = tint ?? Color.white;
             if (Unlit) sr.sharedMaterial = Unlit;
-            go.AddComponent<FxAnim>().Init(sr, frames, false);
+            fx.Init(sr, frames, false);
+            fx.pooled = true;
             return true;
         }
 
@@ -101,15 +102,44 @@ namespace RulesShift
         }
     }
 
-    /// <summary>Frame animation for Fx.Anim / Fx.Loop (game time, 15 fps).</summary>
+    /// <summary>
+    /// Frame animation for Fx.Anim / Fx.Loop / Fx.Frames (game time, 15 fps).
+    /// One-shot Fx.Anim effects are pooled: a finished one is switched off and waits for the next.
+    /// </summary>
     public class FxAnim : MonoBehaviour
     {
+        static readonly System.Collections.Generic.Stack<FxAnim> pool = new System.Collections.Generic.Stack<FxAnim>();
+        static Transform poolRoot;
+
         SpriteRenderer sr;
         Sprite[] frames;
         bool loop;
         float t;
+        [System.NonSerialized] public bool pooled;
 
         float fps = 15f;
+
+        public SpriteRenderer Renderer => sr;
+
+        /// <summary>A pooled effect object (with its renderer) under the given parent.</summary>
+        public static FxAnim Take(Transform parent)
+        {
+            FxAnim fx = null;
+            while (pool.Count > 0 && fx == null)
+            {
+                fx = pool.Pop();
+                if (!fx) fx = null;   // went down with an old scene
+            }
+            if (fx == null)
+            {
+                var go = new GameObject("Fx");
+                fx = go.AddComponent<FxAnim>();
+                fx.sr = go.AddComponent<SpriteRenderer>();
+            }
+            fx.transform.SetParent(parent, false);
+            fx.gameObject.SetActive(true);
+            return fx;
+        }
 
         public void Init(SpriteRenderer r, Sprite[] f, bool looping, float framesPerSecond = 15f)
         {
@@ -117,6 +147,19 @@ namespace RulesShift
             frames = f;
             loop = looping;
             fps = framesPerSecond;
+            t = 0f;
+        }
+
+        void Finish()
+        {
+            if (!pooled || pool.Count >= 200) { Destroy(gameObject); return; }
+            if (!poolRoot)
+            {
+                poolRoot = new GameObject("FxAnimPool").transform;
+                poolRoot.gameObject.SetActive(false);
+            }
+            transform.SetParent(poolRoot, false);
+            pool.Push(this);
         }
 
         void Update()
@@ -125,7 +168,7 @@ namespace RulesShift
             int i = (int)t;
             if (i >= frames.Length)
             {
-                if (!loop) { Destroy(gameObject); return; }
+                if (!loop) { Finish(); return; }
                 t = 0f;
                 i = 0;
             }
